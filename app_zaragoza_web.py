@@ -7,33 +7,35 @@ import os
 import base64
 import random
 
-# --- CONFIGURACIÓN DE IDENTIDAD CORPORATIVA ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Siatema VA Zaragoza | Gestión en la Nube",
+    page_title="Siatema VA Zaragoza",
     page_icon="🏢",
     layout="wide"
 )
 
 # Datos fijos del negocio
 ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
-DB_CONFIG = {
-    'user': 'avnadmin',
-    'password': st.secrets["DB_PASSWORD"],
-    'host': 'mysql-2ac11ac4-kellyzrg-4bb6.c.aivencloud.com',
-    'port': 10087,
-    'database': 'vaz_zaragoza_db', # Actualizado a tu nueva DB
-    'ssl_ca': 'ca.pem',
-    'ssl_disabled': False
-}
 
-# --- FUNCIONES DE BASE DE DATOS ---
+# --- FUNCIÓN DE CONEXIÓN SEGURA ---
 def conectar_db():
     try:
-        return mysql.connector.connect(**DB_CONFIG)
+        # Extraemos los datos de st.secrets (configurados en el panel de Streamlit)
+        config = {
+            'user': st.secrets.mysql.user,
+            'password': st.secrets.mysql.password,
+            'host': st.secrets.mysql.host,
+            'port': st.secrets.mysql.port,
+            'database': st.secrets.mysql.database,
+            'ssl_ca': 'ca.pem',
+            'ssl_disabled': False
+        }
+        return mysql.connector.connect(**config)
     except mysql.connector.Error as err:
-        st.error(f"Error de conexión: {err}")
+        st.error(f"Error de conexión con la base de datos: {err}")
         return None
 
+# --- LÓGICA DE ALMACENAMIENTO ---
 def guardar_registro(datos):
     conn = conectar_db()
     if not conn: return False
@@ -59,12 +61,12 @@ def guardar_registro(datos):
         conn.commit()
         return True
     except Exception as e:
-        st.error(f"Error al guardar: {e}")
+        st.error(f"Error al guardar en la base de datos: {e}")
         return False
     finally:
         conn.close()
 
-# --- GENERADOR DE PDF PROFESIONAL ---
+# --- GENERADOR DE PDF ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists("assets/logo_zaragoza.png"):
@@ -74,26 +76,28 @@ class PDF(FPDF):
         self.cell(80)
         self.cell(110, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'R')
         self.set_font('Arial', '', 9)
-        self.cell(190, 5, 'Tehuacán, Puebla | Presupuestos Oficiales', 0, 1, 'R')
+        self.cell(190, 5, 'Presupuestos Oficiales | Tehuacán, Puebla', 0, 1, 'R')
         self.ln(20)
 
 def generar_pdf_bytes(datos):
     pdf = PDF()
     pdf.add_page()
-    # Encabezado de Folio
+    
+    # Encabezado azul
     pdf.set_fill_color(24, 46, 82)
     pdf.set_text_color(255)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(130, 10, f" CLIENTE: {datos['nombre'].upper()}", 1, 0, 'L', fill=True)
     pdf.cell(60, 10, f" FOLIO: {datos['folio']}", 1, 1, 'C', fill=True)
     
-    # Cuerpo
+    # Datos generales
     pdf.set_text_color(0)
     pdf.set_font('Arial', '', 10)
     pdf.cell(130, 8, f" Fecha: {datetime.now().strftime('%d/%m/%Y')}", 1, 0, 'L')
     pdf.cell(60, 8, f" Asesor: {ASESOR_PRINCIPAL}", 1, 1, 'C')
     pdf.ln(10)
     
+    # Tabla de conceptos
     pdf.set_font('Arial', 'B', 10)
     pdf.set_fill_color(230)
     pdf.cell(100, 8, "SISTEMA / DESCRIPCIÓN", 1, 0, 'C', fill=True)
@@ -102,50 +106,72 @@ def generar_pdf_bytes(datos):
     
     pdf.set_font('Arial', '', 10)
     pdf.cell(100, 12, datos['sistema'], 1, 0, 'L')
-    pdf.cell(30, 12, f"{datos['ancho']}x{datos['alto']}", 1, 0, 'C')
+    pdf.cell(30, 12, f"{datos['ancho']} x {datos['alto']} mm", 1, 0, 'C')
     pdf.set_font('Arial', 'B', 11)
     pdf.cell(60, 12, f"$ {datos['monto']:,.2f} MXN", 1, 1, 'R')
     
-    # Firma
+    # Pie de página / Firma
     pdf.ln(30)
     pdf.line(70, pdf.get_y(), 140, pdf.get_y())
     pdf.set_y(pdf.get_y() + 2)
     pdf.cell(0, 10, ASESOR_PRINCIPAL, 0, 1, 'C')
+    
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ ---
-st.title("🏢 Siatema VA Zaragoza")
-tab1, tab2, tab3 = st.tabs(["Presupuestos", "Historial", "Admin"])
+# --- INTERFAZ DE USUARIO ---
+st.title("🏢 Gestión de Presupuestos - VA Zaragoza")
+
+tab1, tab2 = st.tabs(["Nuevo Presupuesto", "Historial"])
 
 with tab1:
-    with st.form("nuevo_p"):
+    with st.form("form_presupuesto"):
         nombre = st.text_input("Nombre del Cliente")
-        sistema = st.selectbox("Seleccione el Sistema", ["Serie 20", "Serie 35", "Eurovent", "Templado"])
-        c1, c2, c3 = st.columns(3)
-        ancho = c1.number_input("Ancho (mm)", value=0)
-        alto = c2.number_input("Alto (mm)", value=0)
-        monto = c3.number_input("Costo Total Neto", value=0.0)
+        sistema = st.selectbox("Sistema", ["Serie 20 (Nacional)", "Serie 35 (Nacional)", "Línea Eurovent", "Vidrio Templado"])
+        col1, col2, col3 = st.columns(3)
+        ancho = col1.number_input("Ancho (mm)", min_value=0)
+        alto = col2.number_input("Alto (mm)", min_value=0)
+        monto = col3.number_input("Costo Total ($)", min_value=0.0, format="%.2f")
         
-        if st.form_submit_button("Generar y Guardar"):
+        enviar = st.form_submit_button("Generar Presupuesto")
+        
+        if enviar:
             if nombre and monto > 0:
+                # Generamos folio único
                 folio = f"VAZ-{random.randint(1000, 9999)}"
-                info = {'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 'alto': alto, 'monto': monto, 'folio': folio}
+                datos = {
+                    'nombre': nombre, 'sistema': sistema, 
+                    'ancho': ancho, 'alto': alto, 
+                    'monto': monto, 'folio': folio
+                }
                 
-                if guardar_registro(info):
-                    pdf_data = generar_pdf_bytes(info)
-                    st.success(f"Registrado con Folio: {folio}")
-                    st.download_button("Descargar PDF Oficial", data=pdf_data, file_name=f"{folio}.pdf")
-                    # Visualización
-                    base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-                    st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>', unsafe_allow_html=True)
+                # Guardamos y mostramos PDF
+                if guardar_registro(datos):
+                    pdf_bytes = generar_pdf_bytes(datos)
+                    st.success(f"Presupuesto guardado con éxito. Folio: {folio}")
+                    st.download_button(
+                        label="Descargar PDF",
+                        data=pdf_bytes,
+                        file_name=f"{folio}_{nombre}.pdf",
+                        mime="application/pdf"
+                    )
+                    
+                    # Previsualización del PDF
+                    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+                    st.markdown(pdf_display, unsafe_allow_html=True)
             else:
-                st.warning("Complete todos los campos.")
+                st.error("Por favor, rellena los campos obligatorios (Nombre y Costo).")
 
-with tab3:
-    st.subheader("Respaldo Mensual (Excel)")
-    if st.text_input("Clave Admin", type="password") == "Zaragoza2026":
-        if st.button("Generar Excel de este mes"):
-            conn = conectar_db()
-            df = pd.read_sql("SELECT * FROM presupuestos", conn)
-            df.to_excel("respaldo_zaragoza.xlsx", index=False)
-            st.download_button("Bajar Archivo", data=open("respaldo_zaragoza.xlsx", "rb"), file_name="Respaldo_VAZ.xlsx")
+with tab2:
+    st.subheader("Registros Recientes")
+    conn = conectar_db()
+    if conn:
+        query = """
+            SELECT p.folio_vaz, c.nombre_completo, p.nombre_sistema, p.importe_neto, p.fecha_emision 
+            FROM presupuestos p 
+            JOIN clientes c ON p.id_cliente = c.id_cliente 
+            ORDER BY p.fecha_emision DESC LIMIT 10
+        """
+        df = pd.read_sql(query, conn)
+        st.dataframe(df, use_container_width=True)
+        conn.close()
