@@ -17,7 +17,7 @@ st.set_page_config(
 # Datos fijos del negocio
 ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
 
-# --- FUNCIÓN DE CONEXIÓN SEGURA ---
+# --- FUNCIÓN DE CONEXIÓN SEGURA (Streamlit Secrets) ---
 def conectar_db():
     try:
         config = {
@@ -34,25 +34,31 @@ def conectar_db():
         st.error(f"Error de conexión: {err}")
         return None
 
-# --- LÓGICA DE ALMACENAMIENTO ---
+# --- LÓGICA DE ALMACENAMIENTO (Sincronizada con Workbench) ---
 def guardar_registro(datos):
     conn = conectar_db()
     if not conn: return False
     try:
         cursor = conn.cursor()
+        
+        # 1. Insertar en la tabla 'clientes'
         query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
         cursor.execute(query_cli, (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
+        # 2. Insertar en la tabla 'presupuestos'
+        # Usamos solo las columnas que existen en tu DESCRIBE: id_cliente, ancho, alto, importe_neto, fecha_emision
         query_pre = """
             INSERT INTO presupuestos 
-            (folio_vaz, id_cliente, nombre_sistema, ancho, alto, importe_neto, vendedor, fecha_emision) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (id_cliente, ancho, alto, importe_neto, fecha_emision) 
+            VALUES (%s, %s, %s, %s, %s)
         """
         valores = (
-            datos['folio'], id_cliente, datos['sistema'], 
-            datos['ancho'], datos['alto'], datos['monto'], 
-            ASESOR_PRINCIPAL, datetime.now().date()
+            id_cliente, 
+            datos['ancho'], 
+            datos['alto'], 
+            datos['monto'], 
+            datetime.now().date()
         )
         cursor.execute(query_pre, valores)
         conn.commit()
@@ -124,7 +130,6 @@ with tab1:
         alto = c2.number_input("Alto (mm)", min_value=0)
         
         # --- LÓGICA DE CÁLCULO ---
-        # Precios por metro cuadrado (Ajusta estos valores según los costos reales de tu papá)
         precios_m2 = {
             "Serie 20 (Nacional)": 1150,
             "Serie 35 (Nacional)": 1450,
@@ -135,12 +140,15 @@ with tab1:
         m2 = (ancho * alto) / 1000000
         costo_final = m2 * precios_m2[sistema]
         
-        st.subheader(f"Costo Estimado: ${costo_final:,.2f} MXN")
+        st.subheader(f"Costo Calculado: ${costo_final:,.2f} MXN")
         
         if st.form_submit_button("Generar e Imprimir"):
             if nombre and costo_final > 0:
                 folio = f"VAZ-{random.randint(1000, 9999)}"
-                datos_p = {'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 'alto': alto, 'monto': costo_final, 'folio': folio}
+                datos_p = {
+                    'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 
+                    'alto': alto, 'monto': costo_final, 'folio': folio
+                }
                 
                 if guardar_registro(datos_p):
                     pdf_bytes = generar_pdf_bytes(datos_p)
@@ -157,8 +165,8 @@ with tab2:
     if conn:
         try:
             query = """
-                SELECT p.folio_vaz as Folio, c.nombre_completo as Cliente, 
-                       p.nombre_sistema as Sistema, p.importe_neto as Total, 
+                SELECT c.folio_vaz as Folio, c.nombre_completo as Cliente, 
+                       p.ancho as Ancho, p.alto as Alto, p.importe_neto as Total, 
                        p.fecha_emision as Fecha
                 FROM presupuestos p 
                 JOIN clientes c ON p.id_cliente = c.id_cliente 
@@ -169,7 +177,7 @@ with tab2:
                 st.info("No hay registros previos.")
             else:
                 st.dataframe(df, use_container_width=True)
-        except Exception:
-            st.warning("Verifica la estructura de las tablas en Workbench.")
+        except Exception as e:
+            st.warning(f"Error al leer historial: {e}")
         finally:
             conn.close()
