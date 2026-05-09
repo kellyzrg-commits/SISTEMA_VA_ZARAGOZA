@@ -1,182 +1,151 @@
 import streamlit as st
+import mysql.connector
 from fpdf import FPDF
-import datetime
+import pandas as pd
+from datetime import datetime
 import os
 import base64
+import random
 
 # --- CONFIGURACIÓN DE IDENTIDAD CORPORATIVA ---
 st.set_page_config(
-    page_title="Sistema de Gestión Integral | VA Zaragoza",
+    page_title="Siatema VA Zaragoza | Gestión en la Nube",
     page_icon="🏢",
     layout="wide"
 )
 
-# Constantes Estéticas
-COLOR_PRIMARIO = "#182E52"
-COLOR_SECUNDARIO = "#64748B"
-COLOR_FONDO = "#F4F7F9"
+# Datos fijos del negocio
+ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
+DB_CONFIG = {
+    'user': 'avnadmin',
+    'password': st.secrets["DB_PASSWORD"],
+    'host': 'mysql-2ac11ac4-kellyzrg-4bb6.c.aivencloud.com',
+    'port': 10087,
+    'database': 'vaz_zaragoza_db', # Actualizado a tu nueva DB
+    'ssl_ca': 'ca.pem',
+    'ssl_disabled': False
+}
 
-def get_base64_of_bin_file(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+# --- FUNCIONES DE BASE DE DATOS ---
+def conectar_db():
+    try:
+        return mysql.connector.connect(**DB_CONFIG)
+    except mysql.connector.Error as err:
+        st.error(f"Error de conexión: {err}")
+        return None
 
-# --- ESTILOS CSS PROFESIONALES ---
-st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+def guardar_registro(datos):
+    conn = conectar_db()
+    if not conn: return False
+    try:
+        cursor = conn.cursor()
+        # 1. Registrar Cliente
+        query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
+        cursor.execute(query_cli, (datos['folio'], datos['nombre']))
+        id_cliente = cursor.lastrowid
+        
+        # 2. Registrar Presupuesto
+        query_pre = """
+            INSERT INTO presupuestos 
+            (folio_vaz, id_cliente, nombre_sistema, ancho, alto, importe_neto, vendedor, fecha_emision) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        valores = (
+            datos['folio'], id_cliente, datos['sistema'], 
+            datos['ancho'], datos['alto'], datos['monto'], 
+            ASESOR_PRINCIPAL, datetime.now().date()
+        )
+        cursor.execute(query_pre, valores)
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar: {e}")
+        return False
+    finally:
+        conn.close()
+
+# --- GENERADOR DE PDF PROFESIONAL ---
+class PDF(FPDF):
+    def header(self):
+        if os.path.exists("assets/logo_zaragoza.png"):
+            self.image("assets/logo_zaragoza.png", 10, 8, 33)
+        self.set_font('Arial', 'B', 15)
+        self.set_text_color(24, 46, 82)
+        self.cell(80)
+        self.cell(110, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'R')
+        self.set_font('Arial', '', 9)
+        self.cell(190, 5, 'Tehuacán, Puebla | Presupuestos Oficiales', 0, 1, 'R')
+        self.ln(20)
+
+def generar_pdf_bytes(datos):
+    pdf = PDF()
+    pdf.add_page()
+    # Encabezado de Folio
+    pdf.set_fill_color(24, 46, 82)
+    pdf.set_text_color(255)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(130, 10, f" CLIENTE: {datos['nombre'].upper()}", 1, 0, 'L', fill=True)
+    pdf.cell(60, 10, f" FOLIO: {datos['folio']}", 1, 1, 'C', fill=True)
     
-    html, body, [class*="css"] {{
-        font-family: 'Inter', sans-serif;
-    }}
-
-    .main {{
-        background-color: {COLOR_FONDO};
-    }}
-
-    /* Encabezado Principal */
-    .header-container {{
-        background-color: white;
-        padding: 1.5rem 2.5rem;
-        border-radius: 12px;
-        border-bottom: 4px solid {COLOR_PRIMARIO};
-        margin-bottom: 2rem;
-        display: flex;
-        align-items: center;
-        gap: 25px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-    }}
-
-    .logo-img {{
-        max-height: 70px;
-        width: auto;
-    }}
-
-    .header-title {{
-        color: {COLOR_PRIMARIO};
-        font-weight: 700;
-        margin: 0;
-        font-size: 1.6rem;
-    }}
-
-    /* Estilización de Tarjetas de Métricas */
-    .metric-card {{
-        background-color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        border-left: 5px solid {COLOR_PRIMARIO};
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    }}
-
-    /* Botones de Acción */
-    div.stButton > button {{
-        background-color: {COLOR_PRIMARIO};
-        color: white;
-        font-weight: 600;
-        border-radius: 4px;
-        border: none;
-        width: 100%;
-        height: 3rem;
-        transition: 0.3s;
-    }}
-
-    div.stButton > button:hover {{
-        background-color: #254A85;
-        box-shadow: 0 4px 12px rgba(24, 46, 82, 0.15);
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- RENDERIZADO DEL ENCABEZADO ---
-ruta_logo = os.path.join("assets", "logo_zaragoza.png")
-if os.path.exists(ruta_logo):
-    logo_b64 = get_base64_of_bin_file(ruta_logo)
-    st.markdown(f"""
-        <div class="header-container">
-            <img src="data:image/png;base64,{logo_b64}" class="logo-img">
-            <div>
-                <h1 class="header-title">Panel de Control Empresarial</h1>
-                <p style="margin:0; color:{COLOR_SECUNDARIO};">Vidrios y Aluminios Zaragoza | Gestión de Proyectos</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-# --- NAVEGACIÓN POR MÓDULOS ---
-tabs = st.tabs([
-    "📊 Tablero", 
-    "📝 Presupuestos", 
-    "🏗️ Seguimiento de Obra", 
-    "📦 Inventarios", 
-    "👥 Clientes", 
-    "⚙️ Configuración"
-])
-
-# --- 1. TABLERO (ANÁLISIS DE DATOS) ---
-with tabs[0]:
-    st.subheader("Resumen Operativo")
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.markdown('<div class="metric-card"><small>Ventas del Mes</small><h3>$45,200.00</h3></div>', unsafe_allow_html=True)
-    with m2:
-        st.markdown('<div class="metric-card"><small>Proyectos Activos</small><h3>12</h3></div>', unsafe_allow_html=True)
-    with m3:
-        st.markdown('<div class="metric-card"><small>Cotizaciones Pendientes</small><h3>8</h3></div>', unsafe_allow_html=True)
-    with m4:
-        st.markdown('<div class="metric-card"><small>Eficiencia de Instalación</small><h3>94%</h3></div>', unsafe_allow_html=True)
+    # Cuerpo
+    pdf.set_text_color(0)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(130, 8, f" Fecha: {datetime.now().strftime('%d/%m/%Y')}", 1, 0, 'L')
+    pdf.cell(60, 8, f" Asesor: {ASESOR_PRINCIPAL}", 1, 1, 'C')
+    pdf.ln(10)
     
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.info("Nota: Los datos financieros se actualizan automáticamente tras cada cierre de venta registrado.")
-
-# --- 2. EMISIÓN DE PRESUPUESTOS ---
-with tabs[1]:
-    st.subheader("Nueva Cotización Técnica")
-    with st.expander("Información General", expanded=True):
-        c1, c2 = st.columns(2)
-        nombre = c1.text_input("Razón Social del Cliente")
-        asesor = c2.text_input("Asesor Responsable", value="Kelly Zaragoza")
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_fill_color(230)
+    pdf.cell(100, 8, "SISTEMA / DESCRIPCIÓN", 1, 0, 'C', fill=True)
+    pdf.cell(30, 8, "MEDIDAS", 1, 0, 'C', fill=True)
+    pdf.cell(60, 8, "PRECIO NETO", 1, 1, 'C', fill=True)
     
-    with st.expander("Especificaciones de Cancelería", expanded=True):
-        s1, s2, s3, s4 = st.columns(4)
-        sistema = s1.selectbox("Línea de Aluminio", ["Nacional 2\"", "Nacional 3\"", "Eurovent", "Templado"])
-        ancho = s2.number_input("Ancho (mm)", value=1000)
-        alto = s3.number_input("Alto (mm)", value=1000)
-        total = s4.number_input("Precio Final (MXN)", value=0.0)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(100, 12, datos['sistema'], 1, 0, 'L')
+    pdf.cell(30, 12, f"{datos['ancho']}x{datos['alto']}", 1, 0, 'C')
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(60, 12, f"$ {datos['monto']:,.2f} MXN", 1, 1, 'R')
+    
+    # Firma
+    pdf.ln(30)
+    pdf.line(70, pdf.get_y(), 140, pdf.get_y())
+    pdf.set_y(pdf.get_y() + 2)
+    pdf.cell(0, 10, ASESOR_PRINCIPAL, 0, 1, 'C')
+    return pdf.output(dest='S').encode('latin-1')
 
-    if st.button("GENERAR Y REGISTRAR PRESUPUESTO"):
-        st.success("Documento generado. El archivo se ha vinculado al historial del cliente.")
+# --- INTERFAZ ---
+st.title("🏢 Siatema VA Zaragoza")
+tab1, tab2, tab3 = st.tabs(["Presupuestos", "Historial", "Admin"])
 
-# --- 3. SEGUIMIENTO DE OBRA ---
-with tabs[2]:
-    st.subheader("Control de Proyectos en Ejecución")
-    # Simulación de tabla de proyectos
-    st.table({
-        "Proyecto ID": ["VA-001", "VA-002", "VA-003"],
-        "Cliente": ["Residencial Tehuacán", "Local Centro", "Oficinas Norte"],
-        "Estatus": ["En Fabricación", "Pintura", "Instalación Programada"],
-        "Fecha Entrega": ["2026-05-15", "2026-05-18", "2026-05-20"]
-    })
+with tab1:
+    with st.form("nuevo_p"):
+        nombre = st.text_input("Nombre del Cliente")
+        sistema = st.selectbox("Seleccione el Sistema", ["Serie 20", "Serie 35", "Eurovent", "Templado"])
+        c1, c2, c3 = st.columns(3)
+        ancho = c1.number_input("Ancho (mm)", value=0)
+        alto = c2.number_input("Alto (mm)", value=0)
+        monto = c3.number_input("Costo Total Neto", value=0.0)
+        
+        if st.form_submit_button("Generar y Guardar"):
+            if nombre and monto > 0:
+                folio = f"VAZ-{random.randint(1000, 9999)}"
+                info = {'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 'alto': alto, 'monto': monto, 'folio': folio}
+                
+                if guardar_registro(info):
+                    pdf_data = generar_pdf_bytes(info)
+                    st.success(f"Registrado con Folio: {folio}")
+                    st.download_button("Descargar PDF Oficial", data=pdf_data, file_name=f"{folio}.pdf")
+                    # Visualización
+                    base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+                    st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>', unsafe_allow_html=True)
+            else:
+                st.warning("Complete todos los campos.")
 
-# --- 4. INVENTARIOS ---
-with tabs[3]:
-    st.subheader("Control de Stock de Materiales")
-    col_inv1, col_inv2 = st.columns(2)
-    with col_inv1:
-        st.write("**Perfiles de Aluminio (Tramos)**")
-        st.progress(0.75, text="Bolsa Blanca 3\" (75%)")
-        st.progress(0.30, text="Anodizado Natural (30%) - Reabastecer pronto")
-    with col_inv2:
-        st.write("**Herrajes y Accesorios**")
-        st.write("- Carretillas D-200: 45 pzs")
-        st.write("- Sellador de Silicón (Cartuchos): 12 pzs")
-
-# --- 5. GESTIÓN DE CLIENTES (CRM) ---
-with tabs[4]:
-    st.subheader("Directorio de Clientes")
-    st.text_input("🔍 Buscar cliente por nombre o folio...")
-    st.button("AÑADIR NUEVO CLIENTE")
-
-# --- 6. CONFIGURACIÓN ---
-with tabs[5]:
-    st.subheader("Parámetros del Sistema")
-    st.checkbox("Habilitar impuestos automáticos (IVA 16%)", value=True)
-    st.text_input("Ubicación de Respaldo de Base de Datos", value="Cloud Server / Aiven")
+with tab3:
+    st.subheader("Respaldo Mensual (Excel)")
+    if st.text_input("Clave Admin", type="password") == "Zaragoza2026":
+        if st.button("Generar Excel de este mes"):
+            conn = conectar_db()
+            df = pd.read_sql("SELECT * FROM presupuestos", conn)
+            df.to_excel("respaldo_zaragoza.xlsx", index=False)
+            st.download_button("Bajar Archivo", data=open("respaldo_zaragoza.xlsx", "rb"), file_name="Respaldo_VAZ.xlsx")
