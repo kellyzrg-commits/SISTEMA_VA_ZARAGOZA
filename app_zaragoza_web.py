@@ -34,20 +34,20 @@ def conectar_db():
         st.error(f"Error de conexión: {err}")
         return None
 
-# --- LÓGICA DE ALMACENAMIENTO (Sincronizada con Workbench) ---
+# --- LÓGICA DE ALMACENAMIENTO ---
 def guardar_registro(datos):
     conn = conectar_db()
     if not conn: return False
     try:
         cursor = conn.cursor()
         
-        # 1. Insertar en la tabla 'clientes' (columnas: folio_vaz, nombre_completo)
+        # 1. Insertar en 'clientes' (folio_vaz, nombre_completo)
         query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
         cursor.execute(query_cli, (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
-        # 2. Insertar en la tabla 'presupuestos'
-        # Columnas reales: id_cliente, ancho, alto, importe_neto, fecha_emision
+        # 2. Insertar en 'presupuestos'
+        # Columnas: id_cliente, ancho, alto, importe_neto, fecha_emision
         query_pre = """
             INSERT INTO presupuestos 
             (id_cliente, ancho, alto, importe_neto, fecha_emision) 
@@ -129,7 +129,7 @@ with tab1:
         ancho = c1.number_input("Ancho (mm)", min_value=0)
         alto = c2.number_input("Alto (mm)", min_value=0)
         
-        # --- LÓGICA DE CÁLCULO AUTOMÁTICO ---
+        # --- LÓGICA DE CÁLCULO ---
         precios_m2 = {
             "Serie 20 (Nacional)": 1150,
             "Serie 35 (Nacional)": 1450,
@@ -157,14 +157,13 @@ with tab1:
                     base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
                     st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>', unsafe_allow_html=True)
             else:
-                st.error("Por favor llena los campos correctamente.")
+                st.error("Datos incompletos para el cálculo.")
 
 with tab2:
     st.subheader("Registros Recientes")
     conn = conectar_db()
     if conn:
         try:
-            # Consulta ajustada a las columnas reales de tus tablas
             query = """
                 SELECT c.folio_vaz as Folio, c.nombre_completo as Cliente, 
                        p.ancho as Ancho, p.alto as Alto, p.importe_neto as Total, 
@@ -175,10 +174,10 @@ with tab2:
             """
             df = pd.read_sql(query, conn)
             if df.empty:
-                st.info("No hay presupuestos registrados aún.")
+                st.info("No hay registros en la base de datos.")
             else:
                 st.dataframe(df, use_container_width=True)
         except Exception as e:
-            st.warning(f"Error al cargar historial: {e}")
+            st.warning(f"Error al leer historial: {e}")
         finally:
             conn.close()
