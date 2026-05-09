@@ -1,144 +1,130 @@
 import streamlit as st
-import mysql.connector
 import pandas as pd
 from fpdf import FPDF
-import base64
+import datetime
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Sistema VA Zaragoza", layout="wide", page_icon="🪟")
+st.set_page_config(page_title="VA Zaragoza - Presupuestos Pro", layout="wide")
 
-# --- ESTILOS CSS PARA INTERFAZ PROFESIONAL ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #2e7d32; color: white; }
-    .catalogo-card {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        padding: 15px;
-        text-align: center;
-        background-color: white;
-        margin-bottom: 20px;
-    }
-    .diseno-box {
-        border: 4px solid #333;
-        background-color: #e3f2fd;
-        margin: auto;
-        display: flex;
-        position: relative;
-    }
-    </style>
-""", unsafe_allow_html=True)
+class PDF_Pro(FPDF):
+    def header(self):
+        # Logo de Vidrios y Aluminios Zaragoza
+        try:
+            self.image('assets/logo_zaragoza.png', 10, 8, 55)
+        except:
+            self.set_font('Arial', 'B', 15)
+            self.cell(60, 10, 'VA ZARAGOZA')
+        
+        # Información del Negocio (Arriba Derecha)
+        self.set_font('Arial', 'B', 10)
+        self.set_text_color(26, 35, 126) # Azul oscuro
+        self.set_xy(120, 10)
+        self.cell(80, 5, "VIDRIOS Y ALUMINIOS ZARAGOZA", 0, 1, 'R')
+        self.set_font('Arial', '', 8)
+        self.set_text_color(0, 0, 0)
+        self.set_x(120)
+        self.cell(80, 4, "Cancelaría de Aluminio y Cristal", 0, 1, 'R')
+        self.set_x(120)
+        self.cell(80, 4, "Tehuacán, Puebla", 0, 1, 'R')
+        self.ln(15)
 
-# --- CONEXIÓN A NUBE (AIVEN) ---
-def crear_conexion():
-    try:
-        return mysql.connector.connect(
-            host=st.secrets["mysql"]["host"],
-            port=st.secrets["mysql"]["port"],
-            user=st.secrets["mysql"]["user"],
-            password=st.secrets["mysql"]["password"],
-            database=st.secrets["mysql"]["database"]
-        )
-    except:
-        return None
+    def draw_box(self, x, y, w, h, title):
+        self.set_fill_color(26, 35, 126)
+        self.set_text_color(255, 255, 255)
+        self.set_xy(x, y)
+        self.set_font('Arial', 'B', 9)
+        self.cell(w, 6, f"  {title}", 0, 1, 'L', fill=True)
+        self.set_text_color(0, 0, 0)
+        self.rect(x, y, w, h)
 
-# --- GENERACIÓN DE PDF ---
-def generar_pdf(cliente, ancho, alto, sistema, df):
-    pdf = FPDF()
+def generar_pdf_estilo_pro(cliente, ancho, alto, sistema, total, img_path=None):
+    pdf = PDF_Pro()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, f"Presupuesto: Vidrios y Aluminios Zaragoza", ln=True, align='C')
-    pdf.set_font("Arial", '', 12)
-    pdf.cell(200, 10, f"Cliente: {cliente} | Sistema: {sistema}", ln=True, align='L')
-    pdf.cell(200, 10, f"Medidas: {ancho}cm x {alto}cm", ln=True, align='L')
     
-    # Tabla de despiece
+    # --- BLOQUES DE INFORMACIÓN ---
+    # Datos del Presupuesto
+    pdf.draw_box(10, 35, 90, 25, "DATOS DEL PRESUPUESTO")
+    pdf.set_font('Arial', '', 9)
+    pdf.set_xy(12, 42)
+    pdf.cell(80, 5, f"FECHA: {datetime.date.today()}", 0, 1)
+    pdf.set_x(12)
+    pdf.cell(80, 5, f"VALIDEZ: 15 Días", 0, 1)
+    pdf.set_x(12)
+    pdf.cell(80, 5, "FORMA DE PAGO: 50% Anticipo / 50% Contra Entrega", 0, 1)
+
+    # Datos del Cliente
+    pdf.draw_box(105, 35, 95, 25, "DATOS DEL CLIENTE")
+    pdf.set_xy(107, 42)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(90, 5, f"CLIENTE: {cliente.upper()}", 0, 1)
+    pdf.set_font('Arial', '', 9)
+    pdf.set_x(107)
+    pdf.cell(90, 5, "Entrega en Domicilio / Instalación Incluida", 0, 1)
+
+    # --- SECCIÓN TÉCNICA (GRÁFICO Y DESCRIPCIÓN) ---
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_xy(10, 65)
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(90, 7, "  GRAFICO", 1, 0, 'L', fill=True)
+    pdf.cell(95, 7, "  DESCRIPCION", 1, 1, 'L', fill=True)
+    
+    # Espacio para el gráfico (aquí se podría insertar una captura del gráfico de la app)
+    pdf.rect(10, 72, 90, 60)
+    pdf.set_xy(15, 80)
+    pdf.set_font('Arial', 'I', 8)
+    pdf.cell(80, 5, f"Representación: {sistema}", 0, 1, 'C')
+    pdf.set_x(15)
+    pdf.cell(80, 5, f"{ancho} mm x {alto} mm", 0, 1, 'C')
+
+    # Descripción detallada a la derecha
+    pdf.set_xy(105, 75)
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(90, 6, f"{sistema}", 0, 1)
+    pdf.set_font('Arial', '', 9)
+    pdf.set_x(105)
+    pdf.multi_cell(90, 5, f"* Serie: Línea de 2 o 3 pulgadas\n* Color: Natural / Negro / Blanco\n* Medida: {ancho} x {alto} mm\n* Vidrio: Claro 6mm (Laminado opcional)\n* Incluye: Carretillas, felpa y sellado con silicón.")
+
+    # --- TABLA DE COSTOS ---
+    pdf.set_xy(10, 135)
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(100, 8, "CONCEPTO", 1, 0, 'C', fill=True)
+    pdf.cell(30, 8, "CANTIDAD", 1, 0, 'C', fill=True)
+    pdf.cell(60, 8, "TOTAL NETO", 1, 1, 'C', fill=True)
+    
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(100, 10, f"Suministro e Instalación de {sistema}", 1)
+    pdf.cell(30, 10, "1", 1, 0, 'C')
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(60, 10, f"$ {total:,.2f} MXN", 1, 1, 'C')
+
+    # Pie de página (Notas)
     pdf.ln(10)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(60, 10, "Componente", 1)
-    pdf.cell(40, 10, "Medida (cm)", 1)
-    pdf.cell(30, 10, "Cantidad", 1)
-    pdf.cell(60, 10, "Corte", 1)
-    pdf.ln()
-    
-    pdf.set_font("Arial", '', 10)
-    for i, row in df.iterrows():
-        pdf.cell(60, 10, str(row['Componente']), 1)
-        pdf.cell(40, 10, str(row['Medida (cm)']), 1)
-        pdf.cell(30, 10, str(row['Cantidad']), 1)
-        pdf.cell(60, 10, str(row['Observaciones']), 1)
-        pdf.ln()
-    
+    pdf.set_font('Arial', 'I', 8)
+    pdf.multi_cell(190, 4, "Este presupuesto es una estimación técnica basada en las medidas proporcionadas por el cliente. Las medidas definitivas serán rectificadas en obra por nuestro personal. Precios sin IVA.")
+
     return pdf.output(dest='S').encode('latin-1')
 
-# --- LÓGICA DE NAVEGACIÓN ---
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 'Catálogo'
+# --- APP INTERFAZ ---
+st.title("🛡️ Generador de Presupuestos - VA Zaragoza")
 
-# --- VISTA: CATÁLOGO ---
-if st.session_state.pagina == 'Catálogo':
-    st.title("📂 Catálogo de Diseños")
-    st.write("Selecciona un modelo para comenzar la cotización o mostrar al cliente.")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    sistemas = [
-        {"nombre": "Ventana Corrediza", "img": "https://via.placeholder.com/150?text=Corrediza", "id": "corrediza"},
-        {"nombre": "Ventana Fija", "img": "https://via.placeholder.com/150?text=Fija", "id": "fija"},
-        {"nombre": "Puerta Batiente", "img": "https://via.placeholder.com/150?text=Puerta", "id": "puerta"}
-    ]
-    
-    cols = [col1, col2, col3]
-    for i, sys in enumerate(sistemas):
-        with cols[i]:
-            st.markdown(f'<div class="catalogo-card"><img src="{sys["img"]}" width="100%"><h3>{sys["nombre"]}</h3></div>', unsafe_allow_html=True)
-            if st.button(f"Cotizar {sys['nombre']}", key=sys['id']):
-                st.session_state.sistema_sel = sys['nombre']
-                st.session_state.pagina = 'Cotizador'
-                st.rerun()
+with st.sidebar:
+    st.image('assets/logo_zaragoza.png') if st.checkbox("Mostrar Logo") else None
+    cliente = st.text_input("Cliente", "Kelly Zaragoza")
+    sistema = st.selectbox("Producto", ["Ventana Corrediza", "Ventana Fija", "Puerta de Baño"])
+    ancho = st.number_input("Ancho (mm)", value=1200)
+    alto = st.number_input("Alto (mm)", value=1000)
+    precio_m2 = st.number_input("Costo m²", value=1850)
 
-# --- VISTA: COTIZADOR ---
-elif st.session_state.pagina == 'Cotizador':
-    st.sidebar.button("⬅️ Volver al Catálogo", on_click=lambda: st.session_state.update({"pagina": "Catálogo"}))
-    st.title(f"🧮 Cotizador: {st.session_state.sistema_sel}")
+area = (ancho/1000) * (alto/1000)
+subtotal = area * precio_m2
 
-    with st.container():
-        col_f, col_m = st.columns([1, 1])
-        with col_f:
-            cliente = st.text_input("Nombre del Cliente", "Venta Mostrador")
-            ancho = st.number_input("Ancho Total (cm)", min_value=10.0, value=100.0, step=0.1)
-            alto = st.number_input("Alto Total (cm)", min_value=10.0, value=100.0, step=0.1)
-        
-        with col_m:
-            # REPRESENTACIÓN GRÁFICA DINÁMICA
-            st.write("### Vista Previa")
-            ancho_px = min(ancho * 2, 300)
-            alto_px = min(alto * 2, 300)
-            st.markdown(f"""
-                <div class="diseno-box" style="width: {ancho_px}px; height: {alto_px}px;">
-                    <div style="border-right: 2px solid #333; width: 50%; height: 100%; display: flex; align-items: center; justify-content: center;">O</div>
-                    <div style="width: 50%; height: 100%; display: flex; align-items: center; justify-content: center;">X</div>
-                    <div style="position: absolute; bottom: -25px; width: 100%; text-align: center; font-weight: bold;">{ancho} cm</div>
-                    <div style="position: absolute; left: -70px; top: 45%; font-weight: bold; transform: rotate(-90deg);">{alto} cm</div>
-                </div>
-            """, unsafe_allow_html=True)
+st.info(f"### Presupuesto Estimado: ${subtotal:,.2f} MXN")
 
-    # CÁLCULOS CON FÓRMULAS CORREGIDAS
-    zoclo_medida = (ancho - 18) / 2 #
-    
-    despiece_data = {
-        "Componente": ["Cabezal", "Sillar", "Jambas", "Zoclos", "Traslapes"],
-        "Medida (cm)": [ancho, ancho, alto, zoclo_medida, alto - 5],
-        "Cantidad": [1, 1, 2, 2, 2],
-        "Observaciones": ["Corte Recto", "Corte Recto", "Corte Recto", "Descuento Aplicado", "Corte Recto"]
-    }
-    df = pd.DataFrame(despiece_data)
-    
-    st.write("### 📝 Despiece Automático")
-    st.table(df)
-
-    if st.button("💾 Guardar y Generar PDF"):
-        pdf_bytes = generar_pdf(cliente, ancho, alto, st.session_state.sistema_sel, df)
-        st.download_button(label="📥 Descargar Reporte PDF", data=pdf_bytes, file_name=f"Presupuesto_{cliente}.pdf", mime="application/pdf")
-        # Aquí puedes llamar a crear_conexion() para guardar en Aiven
+if st.button("📄 Crear PDF Profesional"):
+    pdf_final = generar_pdf_estilo_pro(cliente, ancho, alto, sistema, subtotal)
+    st.download_button(
+        label="⬇️ Descargar Presupuesto",
+        data=pdf_final,
+        file_name=f"Presupuesto_{cliente}.pdf",
+        mime="application/pdf"
+    )
