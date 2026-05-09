@@ -17,10 +17,9 @@ st.set_page_config(
 # Datos fijos del negocio
 ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
 
-# --- FUNCIÓN DE CONEXIÓN SEGURA (Usando Secrets) ---
+# --- FUNCIÓN DE CONEXIÓN SEGURA ---
 def conectar_db():
     try:
-        # Extraemos los datos del bloque [mysql] en Streamlit Secrets
         config = {
             'user': st.secrets.mysql.user,
             'password': st.secrets.mysql.password,
@@ -41,12 +40,10 @@ def guardar_registro(datos):
     if not conn: return False
     try:
         cursor = conn.cursor()
-        # 1. Registrar Cliente
         query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
         cursor.execute(query_cli, (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
-        # 2. Registrar Presupuesto
         query_pre = """
             INSERT INTO presupuestos 
             (folio_vaz, id_cliente, nombre_sistema, ancho, alto, importe_neto, vendedor, fecha_emision) 
@@ -82,22 +79,18 @@ class PDF(FPDF):
 def generar_pdf_bytes(datos):
     pdf = PDF()
     pdf.add_page()
-    
-    # Encabezado de Folio
     pdf.set_fill_color(24, 46, 82)
     pdf.set_text_color(255)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(130, 10, f" CLIENTE: {datos['nombre'].upper()}", 1, 0, 'L', fill=True)
     pdf.cell(60, 10, f" FOLIO: {datos['folio']}", 1, 1, 'C', fill=True)
     
-    # Datos generales
     pdf.set_text_color(0)
     pdf.set_font('Arial', '', 10)
     pdf.cell(130, 8, f" Fecha: {datetime.now().strftime('%d/%m/%Y')}", 1, 0, 'L')
     pdf.cell(60, 8, f" Asesor: {ASESOR_PRINCIPAL}", 1, 1, 'C')
     pdf.ln(10)
     
-    # Detalle del presupuesto
     pdf.set_font('Arial', 'B', 10)
     pdf.set_fill_color(230)
     pdf.cell(100, 8, "SISTEMA / DESCRIPCIÓN", 1, 0, 'C', fill=True)
@@ -110,7 +103,6 @@ def generar_pdf_bytes(datos):
     pdf.set_font('Arial', 'B', 11)
     pdf.cell(60, 12, f"$ {datos['monto']:,.2f} MXN", 1, 1, 'R')
     
-    # Línea de firma
     pdf.ln(30)
     pdf.line(70, pdf.get_y(), 140, pdf.get_y())
     pdf.set_y(pdf.get_y() + 2)
@@ -127,27 +119,37 @@ with tab1:
     with st.form("form_vaz"):
         nombre = st.text_input("Nombre del Cliente")
         sistema = st.selectbox("Sistema", ["Serie 20 (Nacional)", "Serie 35 (Nacional)", "Línea Eurovent", "Vidrio Templado"])
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         ancho = c1.number_input("Ancho (mm)", min_value=0)
         alto = c2.number_input("Alto (mm)", min_value=0)
-        monto = c3.number_input("Costo Total ($)", min_value=0.0)
         
-        if st.form_submit_button("Generar Presupuesto"):
-            if nombre and monto > 0:
+        # --- LÓGICA DE CÁLCULO ---
+        # Precios por metro cuadrado (Ajusta estos valores según los costos reales de tu papá)
+        precios_m2 = {
+            "Serie 20 (Nacional)": 1150,
+            "Serie 35 (Nacional)": 1450,
+            "Línea Eurovent": 2600,
+            "Vidrio Templado": 3200
+        }
+        
+        m2 = (ancho * alto) / 1000000
+        costo_final = m2 * precios_m2[sistema]
+        
+        st.subheader(f"Costo Estimado: ${costo_final:,.2f} MXN")
+        
+        if st.form_submit_button("Generar e Imprimir"):
+            if nombre and costo_final > 0:
                 folio = f"VAZ-{random.randint(1000, 9999)}"
-                datos_p = {'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 'alto': alto, 'monto': monto, 'folio': folio}
+                datos_p = {'nombre': nombre, 'sistema': sistema, 'ancho': ancho, 'alto': alto, 'monto': costo_final, 'folio': folio}
                 
                 if guardar_registro(datos_p):
                     pdf_bytes = generar_pdf_bytes(datos_p)
-                    st.success(f"¡Éxito! Folio generado: {folio}")
-                    st.download_button("Descargar PDF", data=pdf_bytes, file_name=f"{folio}.pdf", mime="application/pdf")
-                    
-                    # Previsualización
+                    st.success(f"Guardado. Folio: {folio}")
+                    st.download_button("Descargar PDF", data=pdf_bytes, file_name=f"{folio}.pdf")
                     base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>'
-                    st.markdown(pdf_display, unsafe_allow_html=True)
+                    st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>', unsafe_allow_html=True)
             else:
-                st.error("Datos incompletos.")
+                st.error("Datos insuficientes para el cálculo.")
 
 with tab2:
     st.subheader("Registros Recientes")
@@ -164,10 +166,10 @@ with tab2:
             """
             df = pd.read_sql(query, conn)
             if df.empty:
-                st.info("Aún no hay presupuestos en la base de datos.")
+                st.info("No hay registros previos.")
             else:
                 st.dataframe(df, use_container_width=True)
         except Exception:
-            st.warning("No se pudo leer la tabla. Asegúrate de haber ejecutado los comandos SQL en Workbench.")
+            st.warning("Verifica la estructura de las tablas en Workbench.")
         finally:
             conn.close()
