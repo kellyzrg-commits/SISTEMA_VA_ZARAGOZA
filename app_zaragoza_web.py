@@ -9,15 +9,17 @@ import random
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Sistema VA Zaragoza",
+    page_title="Siatema VA Zaragoza",
     page_icon="🏢",
     layout="wide"
 )
 
-# --- FUNCIÓN DE CONEXIÓN ---
+# Datos fijos del negocio
+ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
+
+# --- FUNCIÓN DE CONEXIÓN SEGURA ---
 def conectar_db():
     try:
-        # Asegúrate de tener configurados estos secrets en Streamlit Cloud o tu archivo secrets.toml
         config = {
             'user': st.secrets.mysql.user,
             'password': st.secrets.mysql.password,
@@ -31,39 +33,26 @@ def conectar_db():
         st.error(f"Error de conexión: {err}")
         return None
 
-# --- OBTENER CATÁLOGO DE SISTEMAS ---
-def obtener_sistemas():
-    conn = conectar_db()
-    sistemas = {}
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id_sistema, nombre_sistema, precio_m2 FROM sistemas")
-        for (id_s, nombre, precio) in cursor:
-            sistemas[nombre] = {'id': id_s, 'precio': float(precio)}
-        conn.close()
-    return sistemas
-
-# --- GUARDAR REGISTRO (CON RELACIÓN E-R) ---
+# --- LÓGICA DE ALMACENAMIENTO (Sincronizada con tus tablas) ---
 def guardar_registro(datos):
     conn = conectar_db()
     if not conn: return False
     try:
         cursor = conn.cursor()
         
-        # 1. Insertar Cliente
+        # 1. Insertar en 'clientes'
         query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
         cursor.execute(query_cli, (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
-        # 2. Insertar Presupuesto vinculado al Cliente y al Sistema
+        # 2. Insertar en 'presupuestos' (Ajustado a tus columnas reales)
         query_pre = """
             INSERT INTO presupuestos 
-            (id_cliente, id_sistema, ancho, alto, importe_neto, fecha_emision) 
-            VALUES (%s, %s, %s, %s, %s, %s)
+            (id_cliente, ancho, alto, importe_neto, fecha_emision) 
+            VALUES (%s, %s, %s, %s, %s)
         """
         valores = (
             id_cliente, 
-            datos['id_sistema'], 
             datos['ancho'], 
             datos['alto'], 
             datos['monto'], 
@@ -73,7 +62,7 @@ def guardar_registro(datos):
         conn.commit()
         return True
     except Exception as e:
-        st.error(f"Error al guardar: {e}")
+        st.error(f"Error al guardar en DB: {e}")
         return False
     finally:
         conn.close()
@@ -82,87 +71,107 @@ def guardar_registro(datos):
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 15)
+        self.set_text_color(24, 46, 82)
         self.cell(0, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'C')
-        self.set_font('Arial', '', 10)
-        self.cell(0, 5, 'Presupuestos y Cotizaciones Profesionales', 0, 1, 'C')
+        self.set_font('Arial', '', 9)
+        self.cell(0, 5, 'Presupuestos Oficiales | Tehuacán, Puebla', 0, 1, 'C')
         self.ln(10)
 
 def generar_pdf_bytes(datos):
     pdf = PDF()
     pdf.add_page()
+    pdf.set_fill_color(24, 46, 82)
+    pdf.set_text_color(255)
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, f"Cliente: {datos['nombre']}", 0, 1)
-    pdf.cell(0, 10, f"Folio: {datos['folio']}", 0, 1)
-    pdf.ln(5)
-    pdf.set_font('Arial', '', 11)
-    pdf.cell(0, 10, f"Sistema: {datos['sistema_nombre']}", 0, 1)
-    pdf.cell(0, 10, f"Medidas: {datos['ancho']}mm x {datos['alto']}mm", 0, 1)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, f"Total a Pagar: ${datos['monto']:,.2f} MXN", 0, 1)
+    pdf.cell(130, 10, f" CLIENTE: {datos['nombre'].upper()}", 1, 0, 'L', fill=True)
+    pdf.cell(60, 10, f" FOLIO: {datos['folio']}", 1, 1, 'C', fill=True)
+    
+    pdf.set_text_color(0)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(130, 8, f" Fecha: {datetime.now().strftime('%d/%m/%Y')}", 1, 0, 'L')
+    pdf.cell(60, 8, f" Asesor: {ASESOR_PRINCIPAL}", 1, 1, 'C')
+    pdf.ln(10)
+    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_fill_color(230)
+    pdf.cell(100, 8, "SISTEMA / DESCRIPCIÓN", 1, 0, 'C', fill=True)
+    pdf.cell(30, 8, "MEDIDAS", 1, 0, 'C', fill=True)
+    pdf.cell(60, 8, "PRECIO NETO", 1, 1, 'C', fill=True)
+    
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(100, 12, datos['sistema'], 1, 0, 'L')
+    pdf.cell(30, 12, f"{datos['ancho']} x {datos['alto']} mm", 1, 0, 'C')
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(60, 12, f"$ {datos['monto']:,.2f} MXN", 1, 1, 'R')
+    
+    pdf.ln(30)
+    pdf.line(70, pdf.get_y(), 140, pdf.get_y())
+    pdf.set_y(pdf.get_y() + 2)
+    pdf.cell(0, 10, ASESOR_PRINCIPAL, 0, 1, 'C')
+    
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ DE USUARIO ---
+# --- INTERFAZ ---
 st.title("🏢 Gestión de Presupuestos - VA Zaragoza")
 
-tab1, tab2 = st.tabs(["Nuevo Presupuesto", "Historial de Ventas"])
+tab1, tab2 = st.tabs(["Nuevo Presupuesto", "Historial"])
 
 with tab1:
-    sistemas_dict = obtener_sistemas()
-    
-    with st.form("form_presupuesto"):
+    with st.form("form_vaz"):
         nombre = st.text_input("Nombre del Cliente")
-        nombre_sistema = st.selectbox("Selecciona el Sistema/Material", list(sistemas_dict.keys()) if sistemas_dict else ["Cargando..."])
+        sistema = st.selectbox("Sistema", ["Serie 20 (Nacional)", "Serie 35 (Nacional)", "Línea Eurovent", "Vidrio Templado"])
+        c1, c2 = st.columns(2)
+        ancho = c1.number_input("Ancho (mm)", min_value=0)
+        alto = c2.number_input("Alto (mm)", min_value=0)
         
-        col1, col2 = st.columns(2)
-        ancho = col1.number_input("Ancho (mm)", min_value=0)
-        alto = col2.number_input("Alto (mm)", min_value=0)
+        # --- CÁLCULO (Precios internos para evitar errores de DB) ---
+        precios_m2 = {
+            "Serie 20 (Nacional)": 1150,
+            "Serie 35 (Nacional)": 1450,
+            "Línea Eurovent": 2600,
+            "Vidrio Templado": 3200
+        }
         
-        submit = st.form_submit_button("Calcular y Guardar")
+        m2 = (ancho * alto) / 1000000
+        costo_final = m2 * precios_m2[sistema]
         
-        if submit:
-            if nombre and ancho > 0 and alto > 0:
-                # Recuperar datos del sistema desde la DB
-                info_s = sistemas_dict[nombre_sistema]
-                m2 = (ancho * alto) / 1000000
-                total = m2 * info_s['precio']
+        st.subheader(f"Costo Calculado: ${costo_final:,.2f} MXN")
+        
+        if st.form_submit_button("Generar e Imprimir"):
+            if nombre and costo_final > 0:
                 folio = f"VAZ-{random.randint(1000, 9999)}"
-                
-                datos_finales = {
-                    'nombre': nombre,
-                    'id_sistema': info_s['id'],
-                    'sistema_nombre': nombre_sistema,
-                    'ancho': ancho,
-                    'alto': alto,
-                    'monto': total,
+                datos_p = {
+                    'nombre': nombre, 
+                    'sistema': sistema, 
+                    'ancho': ancho, 
+                    'alto': alto, 
+                    'monto': costo_final, 
                     'folio': folio
                 }
                 
-                if guardar_registro(datos_finales):
-                    st.success(f"¡Presupuesto guardado! Folio: {folio}")
-                    st.metric("Total Calculado", f"${total:,.2f} MXN")
-                    
-                    pdf_b = generar_pdf_bytes(datos_finales)
-                    st.download_button("Descargar PDF", data=pdf_b, file_name=f"{folio}.pdf")
+                if guardar_registro(datos_p):
+                    pdf_bytes = generar_pdf_bytes(datos_p)
+                    st.success(f"Guardado exitoso. Folio: {folio}")
+                    st.download_button("Descargar PDF", data=pdf_bytes, file_name=f"{folio}.pdf")
             else:
-                st.warning("Por favor rellena todos los campos.")
+                st.error("Datos incompletos.")
 
 with tab2:
-    st.subheader("Registros en Base de Datos")
+    st.subheader("Registros Recientes")
     conn = conectar_db()
     if conn:
-        # El JOIN permite ver nombres en lugar de puros IDs
-        query = """
-            SELECT 
-                c.folio_vaz AS Folio, 
-                c.nombre_completo AS Cliente, 
-                s.nombre_sistema AS Material, 
-                p.importe_neto AS Total, 
-                p.fecha_emision AS Fecha
-            FROM presupuestos p
-            JOIN clientes c ON p.id_cliente = c.id_cliente
-            JOIN sistemas s ON p.id_sistema = s.id_sistema
-            ORDER BY p.fecha_emision DESC
-        """
-        df = pd.read_sql(query, conn)
-        st.dataframe(df, use_container_width=True)
-        conn.close()
+        try:
+            query = """
+                SELECT c.folio_vaz as Folio, c.nombre_completo as Cliente, 
+                       p.ancho as Ancho, p.alto as Alto, p.importe_neto as Total, 
+                       p.fecha_emision as Fecha
+                FROM presupuestos p 
+                JOIN clientes c ON p.id_cliente = c.id_cliente 
+                ORDER BY p.fecha_emision DESC LIMIT 10
+            """
+            df = pd.read_sql(query, conn)
+            st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.warning(f"Error al leer historial: {e}")
+        finally:
+            conn.close()
