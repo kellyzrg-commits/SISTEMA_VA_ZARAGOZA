@@ -4,24 +4,24 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="VA Zaragoza - Generador de Presupuestos", layout="wide")
+st.set_page_config(page_title="Sistema VA Zaragoza", layout="wide")
 
-# Color Institucional (Azul Marino Zaragoza)
+# Color Institucional
 AZUL_ZARAGOZA = (24, 46, 82)
 
 class PDF_Pro(FPDF):
     def header(self):
-        # Intentar cargar el logo reemplazado
         logo_path = os.path.join("assets", "logo_zaragoza.png")
         
+        # 1. POSICIÓN DEL LOGO
         if os.path.exists(logo_path):
-            # Posicionamos el logo. 65mm de ancho para que se lea bien el texto interno.
-            self.image(logo_path, 10, 8, 65) 
+            # Mantenemos un ancho de 65 para legibilidad
+            self.image(logo_path, 10, 10, 65) 
         
-        # Información de contacto alineada a la derecha
+        # 2. TEXTO DE CABECERA (Derecha)
         self.set_font('Arial', 'B', 10)
         self.set_text_color(*AZUL_ZARAGOZA)
-        self.set_xy(120, 10)
+        self.set_xy(120, 12)
         self.cell(80, 5, "VIDRIOS Y ALUMINIOS ZARAGOZA", 0, 1, 'R')
         self.set_font('Arial', '', 8)
         self.set_text_color(0, 0, 0)
@@ -30,13 +30,12 @@ class PDF_Pro(FPDF):
         self.set_x(120)
         self.cell(80, 4, "Tehuacán, Puebla", 0, 1, 'R')
         
-        # LÍNEA DIVISORIA: La bajamos a 48mm para que el logo nuevo no la toque
+        # 3. LÍNEA DE SEPARACIÓN (Bajada a 50mm para dar aire)
         self.set_draw_color(*AZUL_ZARAGOZA)
-        self.set_line_width(0.6)
-        self.line(10, 48, 200, 48)
+        self.set_line_width(0.5)
+        self.line(10, 50, 200, 50)
 
     def draw_box(self, x, y, w, h, title):
-        # Dibujar encabezado de sección azul
         self.set_fill_color(*AZUL_ZARAGOZA)
         self.set_text_color(255, 255, 255)
         self.set_xy(x, y)
@@ -45,97 +44,92 @@ class PDF_Pro(FPDF):
         self.set_text_color(0, 0, 0)
         self.rect(x, y, w, h)
 
-def generar_pdf_vaz(cliente, ancho, alto, sistema, total):
+def generar_pdf_final(cliente, ancho, alto, sistema, total):
     pdf = PDF_Pro()
     pdf.add_page()
     
-    # --- AJUSTE DE COORDENADAS PARA EVITAR ENCIMAMIENTO ---
-    # Empezamos el contenido en Y=55 (7mm debajo de la línea divisoria)
-    y_bloque1 = 55
+    # --- COORDENADA DE INICIO SEGURA ---
+    # Al poner Y=60, nos aseguramos que el logo (que llega hasta ~35-40mm) 
+    # y la línea (50mm) tengan espacio de sobra.
+    y_bloque = 60
     
-    # Bloque 1: Datos del Presupuesto
-    pdf.draw_box(10, y_bloque1, 90, 25, "DATOS DEL PRESUPUESTO")
+    # Bloque 1: Presupuesto
+    pdf.draw_box(10, y_bloque, 90, 25, "DATOS DEL PRESUPUESTO")
     pdf.set_font('Arial', '', 9)
-    pdf.set_xy(12, y_bloque1 + 8)
+    pdf.set_xy(12, y_bloque + 8)
     pdf.cell(80, 5, f"FECHA: {datetime.date.today()}", 0, 1)
     pdf.set_x(12)
     pdf.cell(80, 5, "VALIDEZ: 15 Días naturales", 0, 1)
     pdf.set_x(12)
     pdf.cell(80, 5, "PAGO: 50% Anticipo / 50% Finalizar", 0, 1)
 
-    # Bloque 2: Datos del Cliente
-    pdf.draw_box(105, y_bloque1, 95, 25, "DATOS DEL CLIENTE")
-    pdf.set_xy(107, y_bloque1 + 8)
+    # Bloque 2: Cliente
+    pdf.draw_box(105, y_bloque, 95, 25, "DATOS DEL CLIENTE")
+    pdf.set_xy(107, y_bloque + 8)
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(90, 5, f"CLIENTE: {cliente.upper()}", 0, 1)
     pdf.set_font('Arial', '', 9)
     pdf.set_x(107)
-    pdf.cell(90, 5, "Incluye: Entrega e Instalación", 0, 1)
+    pdf.cell(90, 5, "Atención: Personalizada", 0, 1)
+    pdf.set_x(107)
+    pdf.cell(90, 5, "Incluye: Suministro e Instalación", 0, 1)
 
-    # Bloque 3: Especificaciones Técnicas (Bajamos a Y=90)
-    y_tecnica = 90
+    # Sección Técnica (Bajamos a Y=95)
+    y_tec = 95
     pdf.set_fill_color(*AZUL_ZARAGOZA)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_xy(10, y_tecnica)
+    pdf.set_xy(10, y_tec)
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(90, 7, "  DISEÑO ESTIMADO", 1, 0, 'L', fill=True)
-    pdf.cell(95, 7, "  DESCRIPCIÓN TÉCNICA", 1, 1, 'L', fill=True)
+    pdf.cell(95, 7, "  DESCRIPCIÓN", 1, 1, 'L', fill=True)
     
     pdf.set_text_color(0, 0, 0)
-    pdf.rect(10, y_tecnica + 7, 90, 55) # Cuadro para dibujo
-    pdf.set_xy(15, y_tecnica + 25)
+    pdf.rect(10, y_tec + 7, 90, 55) 
+    pdf.set_xy(15, y_tec + 25)
     pdf.set_font('Arial', 'I', 9)
-    pdf.cell(80, 5, f"Modelo Sugerido: {sistema}", 0, 1, 'C')
+    pdf.cell(80, 5, f"Sistema: {sistema}", 0, 1, 'C')
     pdf.set_x(15)
-    pdf.cell(80, 5, f"Dimensión: {ancho} x {alto} mm", 0, 1, 'C')
+    pdf.cell(80, 5, f"{ancho} x {alto} mm", 0, 1, 'C')
 
-    # Detalles a la derecha
-    pdf.set_xy(105, y_tecnica + 10)
+    pdf.set_xy(105, y_tec + 10)
     pdf.set_font('Arial', 'B', 11)
     pdf.cell(90, 6, f"{sistema}", 0, 1)
     pdf.set_font('Arial', '', 9)
     pdf.set_x(105)
-    pdf.multi_cell(90, 5, f"* Aluminio de alta resistencia\n* Medida: {ancho} x {alto} mm\n* Vidrio: Claro 6mm\n* Sellado: Silicón de grado estructural\n* Herrajes: Línea premium.")
+    pdf.multi_cell(90, 5, f"* Aluminio de primera calidad\n* Vidrio claro de 6mm\n* Sellado profesional\n* Herrajes incluidos.")
 
-    # Bloque 4: Tabla de Costos (Y=160)
-    y_tabla = 160
-    pdf.set_xy(10, y_tabla)
-    pdf.set_font('Arial', 'B', 9)
+    # Tabla de Costos (Y=165)
+    y_total = 165
+    pdf.set_xy(10, y_total)
+    pdf.set_font('Arial', 'B', 10)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(100, 8, "CONCEPTO", 1, 0, 'C', fill=True)
-    pdf.cell(30, 8, "CANT.", 1, 0, 'C', fill=True)
-    pdf.cell(60, 8, "TOTAL NETO", 1, 1, 'C', fill=True)
+    pdf.cell(130, 10, "  CONCEPTO GENERAL", 1, 0, 'L', fill=True)
+    pdf.cell(60, 10, "TOTAL", 1, 1, 'C', fill=True)
     
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(100, 12, f"Suministro e Instalación de {sistema}", 1)
-    pdf.cell(30, 12, "1", 1, 0, 'C')
-    pdf.set_font('Arial', 'B', 11)
-    pdf.cell(60, 12, f"$ {total:,.2f} MXN", 1, 1, 'C')
-
-    # Footer
-    pdf.set_xy(10, 185)
-    pdf.set_font('Arial', 'I', 8)
-    pdf.multi_cell(190, 4, "Nota: Este presupuesto no incluye IVA. Las medidas son rectificadas en obra por nuestro personal técnico antes de la fabricación.")
+    pdf.set_font('Arial', '', 11)
+    pdf.cell(130, 15, f"  Fabricación e Instalación de {sistema}", 1)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(60, 15, f"$ {total:,.2f} MXN", 1, 1, 'C')
 
     return pdf.output(dest='S').encode('latin-1')
 
 # --- INTERFAZ ---
-st.title("🛡️ Panel de Ventas - Vidrios y Aluminios Zaragoza")
+st.title("💼 Generador de Notas - VA Zaragoza")
 
-col1, col2 = st.columns(2)
-with col1:
-    cliente = st.text_input("Nombre del Cliente", "Kelly Zaragoza")
-    sistema = st.selectbox("Producto", ["Ventana Corrediza", "Ventana Fija", "Puerta Batiente"])
-with col2:
-    ancho = st.number_input("Ancho (mm)", 1200)
-    alto = st.number_input("Alto (mm)", 1000)
-    total = st.number_input("Precio Final", 2220.0)
+col_a, col_b = st.columns(2)
+with col_a:
+    nom_cliente = st.text_input("Cliente", "Kelly Zaragoza")
+    tipo_trabajo = st.selectbox("Tipo de Trabajo", ["Ventana Corrediza", "Ventana Fija", "Puerta de Baño", "Cancelería General"])
+with col_b:
+    w_mm = st.number_input("Ancho (mm)", 1200)
+    h_mm = st.number_input("Alto (mm)", 1000)
+    monto = st.number_input("Total (MXN)", 2220.0)
 
-if st.button("✅ Crear Nota Profesional"):
-    pdf_output = generar_pdf_vaz(cliente, ancho, alto, sistema, total)
+if st.button("🖨️ Generar PDF Profesional"):
+    pdf_final = generar_pdf_final(nom_cliente, w_mm, h_mm, tipo_trabajo, monto)
     st.download_button(
-        label="💾 Descargar PDF",
-        data=pdf_output,
-        file_name=f"Presupuesto_{cliente}.pdf",
+        label="⬇️ Descargar Archivo",
+        data=pdf_final,
+        file_name=f"Presupuesto_{nom_cliente}.pdf",
         mime="application/pdf"
     )
