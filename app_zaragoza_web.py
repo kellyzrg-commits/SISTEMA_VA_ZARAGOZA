@@ -14,10 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Datos fijos del negocio
-ASESOR_PRINCIPAL = "Claudio Zaragoza Gorgonio"
-
-# --- FUNCIÓN DE CONEXIÓN SEGURA ---
+# --- FUNCIÓN DE CONEXIÓN ---
 def conectar_db():
     try:
         config = {
@@ -33,83 +30,27 @@ def conectar_db():
         st.error(f"Error de conexión: {err}")
         return None
 
-# --- LÓGICA DE ALMACENAMIENTO (Sincronizada con tus tablas) ---
+# --- GUARDAR REGISTRO ---
 def guardar_registro(datos):
     conn = conectar_db()
     if not conn: return False
     try:
         cursor = conn.cursor()
-        
-        # 1. Insertar en 'clientes'
-        query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
-        cursor.execute(query_cli, (datos['folio'], datos['nombre']))
+        # 1. Insertar Cliente
+        cursor.execute("INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)", 
+                       (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
-        # 2. Insertar en 'presupuestos' (Ajustado a tus columnas reales)
-        query_pre = """
-            INSERT INTO presupuestos 
-            (id_cliente, ancho, alto, importe_neto, fecha_emision) 
-            VALUES (%s, %s, %s, %s, %s)
-        """
-        valores = (
-            id_cliente, 
-            datos['ancho'], 
-            datos['alto'], 
-            datos['monto'], 
-            datetime.now().date()
-        )
-        cursor.execute(query_pre, valores)
+        # 2. Insertar Presupuesto
+        query_pre = "INSERT INTO presupuestos (id_cliente, ancho, alto, importe_neto, fecha_emision) VALUES (%s, %s, %s, %s, %s)"
+        cursor.execute(query_pre, (id_cliente, datos['ancho'], datos['alto'], datos['monto'], datetime.now().date()))
         conn.commit()
         return True
     except Exception as e:
-        st.error(f"Error al guardar en DB: {e}")
+        st.error(f"Error en DB: {e}")
         return False
     finally:
         conn.close()
-
-# --- GENERADOR DE PDF ---
-class PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.set_text_color(24, 46, 82)
-        self.cell(0, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'C')
-        self.set_font('Arial', '', 9)
-        self.cell(0, 5, 'Presupuestos Oficiales | Tehuacán, Puebla', 0, 1, 'C')
-        self.ln(10)
-
-def generar_pdf_bytes(datos):
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_fill_color(24, 46, 82)
-    pdf.set_text_color(255)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(130, 10, f" CLIENTE: {datos['nombre'].upper()}", 1, 0, 'L', fill=True)
-    pdf.cell(60, 10, f" FOLIO: {datos['folio']}", 1, 1, 'C', fill=True)
-    
-    pdf.set_text_color(0)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(130, 8, f" Fecha: {datetime.now().strftime('%d/%m/%Y')}", 1, 0, 'L')
-    pdf.cell(60, 8, f" Asesor: {ASESOR_PRINCIPAL}", 1, 1, 'C')
-    pdf.ln(10)
-    
-    pdf.set_font('Arial', 'B', 10)
-    pdf.set_fill_color(230)
-    pdf.cell(100, 8, "SISTEMA / DESCRIPCIÓN", 1, 0, 'C', fill=True)
-    pdf.cell(30, 8, "MEDIDAS", 1, 0, 'C', fill=True)
-    pdf.cell(60, 8, "PRECIO NETO", 1, 1, 'C', fill=True)
-    
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(100, 12, datos['sistema'], 1, 0, 'L')
-    pdf.cell(30, 12, f"{datos['ancho']} x {datos['alto']} mm", 1, 0, 'C')
-    pdf.set_font('Arial', 'B', 11)
-    pdf.cell(60, 12, f"$ {datos['monto']:,.2f} MXN", 1, 1, 'R')
-    
-    pdf.ln(30)
-    pdf.line(70, pdf.get_y(), 140, pdf.get_y())
-    pdf.set_y(pdf.get_y() + 2)
-    pdf.cell(0, 10, ASESOR_PRINCIPAL, 0, 1, 'C')
-    
-    return pdf.output(dest='S').encode('latin-1')
 
 # --- INTERFAZ ---
 st.title("🏢 Gestión de Presupuestos - VA Zaragoza")
@@ -124,54 +65,27 @@ with tab1:
         ancho = c1.number_input("Ancho (mm)", min_value=0)
         alto = c2.number_input("Alto (mm)", min_value=0)
         
-        # --- CÁLCULO (Precios internos para evitar errores de DB) ---
-        precios_m2 = {
-            "Serie 20 (Nacional)": 1150,
-            "Serie 35 (Nacional)": 1450,
-            "Línea Eurovent": 2600,
-            "Vidrio Templado": 3200
-        }
+        # Precios fijos (como los tenías antes)
+        precios = {"Serie 20 (Nacional)": 1150, "Serie 35 (Nacional)": 1450, "Línea Eurovent": 2600, "Vidrio Templado": 3200}
         
-        m2 = (ancho * alto) / 1000000
-        costo_final = m2 * precios_m2[sistema]
-        
-        st.subheader(f"Costo Calculado: ${costo_final:,.2f} MXN")
-        
-        if st.form_submit_button("Generar e Imprimir"):
-            if nombre and costo_final > 0:
+        if st.form_submit_button("Generar y Guardar"):
+            if nombre and ancho > 0:
+                total = ((ancho * alto) / 1000000) * precios[sistema]
                 folio = f"VAZ-{random.randint(1000, 9999)}"
-                datos_p = {
-                    'nombre': nombre, 
-                    'sistema': sistema, 
-                    'ancho': ancho, 
-                    'alto': alto, 
-                    'monto': costo_final, 
-                    'folio': folio
-                }
+                
+                datos_p = {'nombre': nombre, 'ancho': ancho, 'alto': alto, 'monto': total, 'folio': folio}
                 
                 if guardar_registro(datos_p):
-                    pdf_bytes = generar_pdf_bytes(datos_p)
-                    st.success(f"Guardado exitoso. Folio: {folio}")
-                    st.download_button("Descargar PDF", data=pdf_bytes, file_name=f"{folio}.pdf")
+                    st.success(f"¡Guardado! Folio: {folio}")
+                    st.metric("Total", f"${total:,.2f} MXN")
             else:
-                st.error("Datos incompletos.")
+                st.error("Rellena todos los campos")
 
 with tab2:
     st.subheader("Registros Recientes")
     conn = conectar_db()
     if conn:
-        try:
-            query = """
-                SELECT c.folio_vaz as Folio, c.nombre_completo as Cliente, 
-                       p.ancho as Ancho, p.alto as Alto, p.importe_neto as Total, 
-                       p.fecha_emision as Fecha
-                FROM presupuestos p 
-                JOIN clientes c ON p.id_cliente = c.id_cliente 
-                ORDER BY p.fecha_emision DESC LIMIT 10
-            """
-            df = pd.read_sql(query, conn)
-            st.dataframe(df, use_container_width=True)
-        except Exception as e:
-            st.warning(f"Error al leer historial: {e}")
-        finally:
-            conn.close()
+        query = "SELECT c.folio_vaz, c.nombre_completo, p.importe_neto, p.fecha_emision FROM presupuestos p JOIN clientes c ON p.id_cliente = c.id_cliente ORDER BY p.fecha_emision DESC"
+        df = pd.read_sql(query, conn)
+        st.dataframe(df, use_container_width=True)
+        conn.close()
