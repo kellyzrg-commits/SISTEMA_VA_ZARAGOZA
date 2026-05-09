@@ -41,13 +41,13 @@ def guardar_registro(datos):
     try:
         cursor = conn.cursor()
         
-        # 1. Insertar en la tabla 'clientes'
+        # 1. Insertar en la tabla 'clientes' (columnas: folio_vaz, nombre_completo)
         query_cli = "INSERT INTO clientes (folio_vaz, nombre_completo) VALUES (%s, %s)"
         cursor.execute(query_cli, (datos['folio'], datos['nombre']))
         id_cliente = cursor.lastrowid
         
         # 2. Insertar en la tabla 'presupuestos'
-        # Usamos solo las columnas que existen en tu DESCRIBE: id_cliente, ancho, alto, importe_neto, fecha_emision
+        # Columnas reales: id_cliente, ancho, alto, importe_neto, fecha_emision
         query_pre = """
             INSERT INTO presupuestos 
             (id_cliente, ancho, alto, importe_neto, fecha_emision) 
@@ -129,7 +129,7 @@ with tab1:
         ancho = c1.number_input("Ancho (mm)", min_value=0)
         alto = c2.number_input("Alto (mm)", min_value=0)
         
-        # --- LÓGICA DE CÁLCULO ---
+        # --- LÓGICA DE CÁLCULO AUTOMÁTICO ---
         precios_m2 = {
             "Serie 20 (Nacional)": 1150,
             "Serie 35 (Nacional)": 1450,
@@ -157,13 +157,14 @@ with tab1:
                     base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
                     st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>', unsafe_allow_html=True)
             else:
-                st.error("Datos insuficientes para el cálculo.")
+                st.error("Por favor llena los campos correctamente.")
 
 with tab2:
     st.subheader("Registros Recientes")
     conn = conectar_db()
     if conn:
         try:
+            # Consulta ajustada a las columnas reales de tus tablas
             query = """
                 SELECT c.folio_vaz as Folio, c.nombre_completo as Cliente, 
                        p.ancho as Ancho, p.alto as Alto, p.importe_neto as Total, 
@@ -174,10 +175,10 @@ with tab2:
             """
             df = pd.read_sql(query, conn)
             if df.empty:
-                st.info("No hay registros previos.")
+                st.info("No hay presupuestos registrados aún.")
             else:
                 st.dataframe(df, use_container_width=True)
         except Exception as e:
-            st.warning(f"Error al leer historial: {e}")
+            st.warning(f"Error al cargar historial: {e}")
         finally:
             conn.close()
