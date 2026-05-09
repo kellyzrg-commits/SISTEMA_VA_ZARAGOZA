@@ -13,16 +13,16 @@ class PDF_Pro(FPDF):
     def header(self):
         logo_path = os.path.join("assets", "logo_zaragoza.png")
         
-        # 1. POSICIÓN DEL LOGO (Esquina superior izquierda, según tu marca)
+        # 1. POSICIÓN DEL LOGO (Arriba de la línea)
         if os.path.exists(logo_path):
-            # Aumentamos el ancho a 75 para que llene el recuadro que marcaste
-            # X=10 (margen izquierdo), Y=8 (margen superior)
-            self.image(logo_path, 10, 8, 75) 
+            # X=10, Y=10 para que esté en la esquina superior izquierda
+            # El tamaño de 70 es ideal para que luzca profesional
+            self.image(logo_path, 10, 10, 70) 
         
-        # 2. TEXTO DE CABECERA (Derecha)
+        # 2. TEXTO DE CABECERA (Alineado a la derecha del logo)
         self.set_font('Arial', 'B', 10)
         self.set_text_color(*AZUL_ZARAGOZA)
-        self.set_xy(120, 15) # Bajamos un poco el texto para que alinee con el logo grande
+        self.set_xy(120, 15)
         self.cell(80, 5, "VIDRIOS Y ALUMINIOS ZARAGOZA", 0, 1, 'R')
         self.set_font('Arial', '', 8)
         self.set_text_color(0, 0, 0)
@@ -31,11 +31,12 @@ class PDF_Pro(FPDF):
         self.set_x(120)
         self.cell(80, 4, "Tehuacán, Puebla", 0, 1, 'R')
         
-        # 3. LÍNEA DE SEPARACIÓN
-        # La bajamos a Y=52 para que el logo grande tenga su propio espacio arriba
+        # 3. LÍNEA AZUL (Actúa como separador debajo del logo)
+        # La colocamos en Y=48 para que el logo (que mide unos 35-40mm de alto) 
+        # quede totalmente por encima.
         self.set_draw_color(*AZUL_ZARAGOZA)
         self.set_line_width(0.6)
-        self.line(10, 52, 200, 52)
+        self.line(10, 48, 200, 48)
 
     def draw_box(self, x, y, w, h, title):
         self.set_fill_color(*AZUL_ZARAGOZA)
@@ -50,9 +51,9 @@ def generar_pdf_vaz(cliente, ancho, alto, sistema, total):
     pdf = PDF_Pro()
     pdf.add_page()
     
-    # --- AJUSTE DE INICIO ---
-    # Empezamos en Y=60 para dejar un margen de aire tras la línea azul
-    y_bloque = 60
+    # --- COORDENADA DE INICIO DE CONTENIDO ---
+    # Bajamos el inicio a Y=55 para que los cuadros no toquen la línea azul
+    y_bloque = 55
     
     # Bloque Datos Presupuesto
     pdf.draw_box(10, y_bloque, 90, 25, "DATOS DEL PRESUPUESTO")
@@ -72,9 +73,11 @@ def generar_pdf_vaz(cliente, ancho, alto, sistema, total):
     pdf.set_font('Arial', '', 9)
     pdf.set_x(107)
     pdf.cell(90, 5, "Servicio: Fabricación e Instalación", 0, 1)
+    pdf.set_x(107)
+    pdf.cell(90, 5, "Incluye: Suministro y Colocación", 0, 1)
 
-    # Bloque Diseño (Y=95)
-    y_tec = 95
+    # Bloque Diseño (Y=90)
+    y_tec = 90
     pdf.set_fill_color(*AZUL_ZARAGOZA)
     pdf.set_text_color(255, 255, 255)
     pdf.set_xy(10, y_tec)
@@ -95,10 +98,10 @@ def generar_pdf_vaz(cliente, ancho, alto, sistema, total):
     pdf.cell(90, 6, f"{sistema}", 0, 1)
     pdf.set_font('Arial', '', 9)
     pdf.set_x(105)
-    pdf.multi_cell(90, 5, f"* Aluminio de alta calidad\n* Vidrio claro 6mm\n* Sellado hermético\n* Herrajes reforzados.")
+    pdf.multi_cell(90, 5, f"* Aluminio de alta calidad\n* Vidrio claro 6mm\n* Sellado profesional\n* Herrajes de alta resistencia.")
 
-    # Tabla Total (Y=165)
-    y_total = 165
+    # Tabla Total (Y=160)
+    y_total = 160
     pdf.set_xy(10, y_total)
     pdf.set_font('Arial', 'B', 10)
     pdf.set_fill_color(240, 240, 240)
@@ -106,28 +109,29 @@ def generar_pdf_vaz(cliente, ancho, alto, sistema, total):
     pdf.cell(60, 10, "TOTAL", 1, 1, 'C', fill=True)
     
     pdf.set_font('Arial', '', 11)
-    pdf.cell(130, 15, f"  Suministro e Instalación de {sistema}", 1)
+    pdf.cell(130, 15, f"  Fabricación e Instalación de {sistema}", 1)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(60, 15, f"$ {total:,.2f} MXN", 1, 1, 'C')
 
     return pdf.output(dest='S').encode('latin-1')
 
-# --- UI ---
-st.title("💼 Generador de Notas VA Zaragoza")
+# --- INTERFAZ STREAMLIT ---
+st.title("🗒️ Sistema de Notas VAZ")
 
-with st.sidebar:
-    st.header("Datos de Nota")
-    c = st.text_input("Cliente", "Kelly Zaragoza")
-    s = st.selectbox("Sistema", ["Ventana Corrediza", "Puerta Batiente", "Fijo"])
-    w = st.number_input("Ancho", 1200)
-    h = st.number_input("Alto", 1000)
-    p = st.number_input("Precio", 2220.0)
+col1, col2 = st.columns(2)
+with col1:
+    c = st.text_input("Nombre del Cliente", "Kelly Zaragoza")
+    s = st.selectbox("Tipo de Sistema", ["Ventana Corrediza", "Puerta Batiente", "Fijo", "Cancelería"])
+with col2:
+    w = st.number_input("Ancho (mm)", 1200)
+    h = st.number_input("Alto (mm)", 1000)
+    p = st.number_input("Costo Total ($)", 2220.0)
 
-if st.button("🖨️ Generar Nota"):
-    pdf_file = generar_pdf_vaz(c, w, h, s, p)
+if st.button("🏗️ Generar Documento PDF"):
+    pdf_bytes = generar_pdf_vaz(c, w, h, s, p)
     st.download_button(
         label="⬇️ Descargar PDF",
-        data=pdf_file,
-        file_name=f"Nota_{c}.pdf",
+        data=pdf_bytes,
+        file_name=f"Nota_VAZ_{c}.pdf",
         mime="application/pdf"
     )
