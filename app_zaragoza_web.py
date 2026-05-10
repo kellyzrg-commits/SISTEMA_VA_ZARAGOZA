@@ -1,126 +1,161 @@
 import streamlit as st
 import mysql.connector
-from fpdf import FPDF
 import pandas as pd
 from datetime import datetime
 import random
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="VA Zaragoza - Panel de Control", layout="wide")
+# --- CONFIGURACIÓN DE ESTILO ---
+st.set_page_config(page_title="VAZ-Control V3.0", layout="wide")
 
-# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    [data-testid="stSidebar"] {
-        background-color: #1e3a8a;
-        color: white;
-    }
-    .st-emotion-cache-10o099s { color: white !important; }
-    .price-card {
-        background-color: #1e3a8a;
-        color: white;
-        padding: 25px;
-        border-radius: 15px;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .canvas-bg {
-        background-color: white;
-        border: 4px solid #1e3a8a;
-        border-radius: 10px;
-        height: 350px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; }
+    .admin-card { background-color: #e6fffa; padding: 20px; border-radius: 10px; border: 1px solid #38b2ac; }
+    .asesor-card { background-color: #ebf8ff; padding: 20px; border-radius: 10px; border: 1px solid #4299e1; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ LATERAL (SIDEBAR) ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3233/3233483.png", width=100) # Logo genérico
-    st.title("Menú VAZ")
+# --- 1. FUNCIONES DE BASE DE DATOS ---
+def conectar_db():
+    try:
+        return mysql.connector.connect(
+            host=st.secrets["mysql"]["host"],
+            user=st.secrets["mysql"]["user"],
+            password=st.secrets["mysql"]["password"],
+            database=st.secrets["mysql"]["database"],
+            port=st.secrets["mysql"]["port"]
+        )
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
+        return None
+
+def validar_usuario(usuario, password):
+    conn = conectar_db()
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT id_usuario, rol, nombre_real FROM usuarios WHERE nombre_usuario = %s AND password_hash = %s"
+        cursor.execute(query, (usuario, password))
+        res = cursor.fetchone()
+        conn.close()
+        return res
+    return None
+
+def obtener_precios_db():
+    conn = conectar_db()
+    if conn:
+        df = pd.read_sql("SELECT id_config, concepto, costo_base_m2 FROM configuracion_precios", conn)
+        conn.close()
+        return df
+    return pd.DataFrame()
+
+def actualizar_precio_db(id_c, nuevo_precio):
+    conn = conectar_db()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE configuracion_precios SET costo_base_m2 = %s WHERE id_config = %s", (nuevo_precio, id_c))
+        conn.commit()
+        conn.close()
+        return True
+    return False
+
+# --- 2. SISTEMA DE LOGIN ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("🏢 Vidrios y Aluminios Zaragoza - V3.0")
+    with st.container(border=True):
+        st.subheader("Acceso al Sistema")
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
+        if st.button("Iniciar Sesión"):
+            user = validar_usuario(u, p)
+            if user:
+                st.session_state.logged_in = True
+                st.session_state.rol = user['rol']
+                st.session_state.nombre = user['nombre_real']
+                st.session_state.uid = user['id_usuario']
+                st.rerun()
+            else:
+                st.error("Credenciales inválidas")
+
+# --- 3. INTERFAZ PRINCIPAL (LOGUEADO) ---
+else:
+    st.sidebar.title("VAZ-Control")
+    st.sidebar.write(f"Sesión: **{st.session_state.nombre}**")
+    st.sidebar.write(f"Rol: {st.session_state.rol.capitalize()}")
     
-    opcion_principal = st.selectbox(
-        "📂 Categoría Principal",
-        ["Ventanas", "Puertas", "Mosquiteros", "Vidrios Especiales", "Historial"]
-    )
-    
-    st.divider()
-    
-    # SUBCATEGORÍAS DINÁMICAS (Lógica de "Hojas" y "Líneas")
-    sub_opcion = None
-    if opcion_principal == "Ventanas":
-        st.subheader("⚙️ Configuración de Hoja")
-        sub_opcion = st.radio("Tipo de Hoja:", ["Hoja Corrediza", "Hoja Fija", "Hoja Traslapo", "Hoja Cabezal"])
-        linea = st.selectbox("Línea:", ["2 Pulgadas", "3 Pulgadas", "Eurovent"])
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    # --- MODO ADMINISTRADOR ---
+    if st.session_state.rol == 'administrador':
+        st.header("⚙️ Panel de Gestión de Precios (Admin)")
+        st.info("Modifica los costos base por m2. Estos cambios afectan a todas las cotizaciones futuras.")
         
-    elif opcion_principal == "Puertas":
-        st.subheader("🚪 Estilo de Puerta")
-        sub_opcion = st.radio("Línea:", ["Línea Pesada", "Línea Ligera", "Multi-panel"])
-        linea = st.selectbox("Espesor:", ["2 Pulgadas", "3 Pulgadas"])
+        precios_df = obtener_precios_db()
+        if not precios_df.empty:
+            for index, row in precios_df.iterrows():
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    col1.write(f"**{row['concepto']}**")
+                    nuevo_p = col2.number_input(f"Costo m2", value=float(row['costo_base_m2']), key=f"p_{row['id_config']}")
+                    if col3.button("Actualizar", key=f"btn_{row['id_config']}"):
+                        if actualizar_precio_db(row['id_config'], nuevo_p):
+                            st.toast(f"Actualizado: {row['concepto']}")
         
-    elif opcion_principal == "Mosquiteros":
-        sub_opcion = st.radio("Modelo:", ["Marco Fijo", "Corredizo Tradicional"])
-        linea = "Nacional"
+        st.divider()
+        st.subheader("📊 Reporte de Ventas Globales")
+        # Aquí podrías cargar un df con todos los presupuestos de la DB
 
-# --- LÓGICA DE CÁLCULO ---
-def calcular_presupuesto(cat, sub, lin, anc, alt):
-    m2 = (anc * alt) / 1000000
-    base = 1200 # Precio base promedio
-    if "3 Pulgadas" in lin: base += 300
-    if "Eurovent" in lin: base += 800
-    return round((m2 * base) * 1.5, 2)
+    # --- MODO ASESOR ---
+    else:
+        st.header("📝 Cotizador Técnico (Asesor)")
+        
+        col_form, col_visual = st.columns([1, 1])
+        
+        with col_form:
+            with st.container(border=True):
+                st.write("### Datos de la Obra")
+                cliente = st.text_input("Nombre del Cliente")
+                
+                # Traer precios actualizados de la DB
+                df_p = obtener_precios_db()
+                opciones = df_p['concepto'].tolist()
+                seleccion = st.selectbox("Material / Línea", opciones)
+                
+                c1, c2 = st.columns(2)
+                ancho = c1.number_input("Ancho (mm)", min_value=100, step=1)
+                alto = c2.number_input("Alto (mm)", min_value=100, step=1)
+                
+                # Lógica de Cálculo
+                costo_base = df_p[df_p['concepto'] == seleccion]['costo_base_m2'].values[0]
+                m2 = (ancho * alto) / 1000000
+                subtotal = m2 * float(costo_base)
+                total = subtotal * 1.50 # +50% Mano de obra
+                
+                st.markdown(f"### Total: ${total:,.2f} MXN")
+                st.caption(f"Incluye material y 50% de mano de obra. (Precio base: ${costo_base}/m2)")
 
-# --- CONTENIDO PRINCIPAL ---
-if opcion_principal != "Historial":
-    st.header(f"✨ Cotizador: {opcion_principal}")
-    st.caption(f"Configuración activa: {sub_opcion} | {linea if 'linea' in locals() else ''}")
-
-    col_form, col_vis = st.columns([1, 1.2])
-
-    with col_form:
-        with st.container(border=True):
-            cliente = st.text_input("Nombre del Cliente")
-            c1, c2 = st.columns(2)
-            ancho = c1.number_input("Ancho (mm)", value=1200, step=10)
-            alto = c2.number_input("Alto (mm)", value=1500, step=10)
-            
-            total = calcular_presupuesto(opcion_principal, sub_opcion, linea if 'linea' in locals() else '', ancho, alto)
-            
+        with col_visual:
+            st.write("### Visualización de Estructura")
+            # Dibujo proporcional simple
+            ratio = ancho / alto if alto != 0 else 1
             st.markdown(f"""
-                <div class="price-card">
-                    <p style="margin:0; opacity:0.8;">COSTO TOTAL NETO</p>
-                    <h1 style="margin:0; font-size:45px;">${total:,.2f}</h1>
-                    <p style="margin:0; font-size:12px;">Incluye material y mano de obra</p>
+                <div style="width:100%; height:300px; display:flex; justify-content:center; align-items:center; background:#f0f2f6; border-radius:10px;">
+                    <div style="width:{200*ratio if ratio < 1.5 else 250}px; height:200px; border:5px solid #2c3e50; background:rgba(52,152,219,0.2); display:flex; justify-content:center; align-items:center;">
+                        <b>{ancho}x{alto}</b>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
             
-            if st.button("📝 Generar Cotización PDF", use_container_width=True):
-                st.success(f"Documento listo para {cliente}")
-
-    with col_vis:
-        st.subheader("📐 Vista Previa de Estructura")
-        # Escala dinámica para la ilustración
-        max_dim = max(ancho, alto)
-        scale = 300 / max_dim
-        w_px, h_px = ancho * scale, alto * scale
-        
-        st.markdown(f"""
-            <div class="canvas-bg">
-                <div style="width:{w_px}px; height:{h_px}px; border:5px solid #1e3a8a; background:rgba(30,58,138,0.1); display:flex; align-items:center; justify-content:center;">
-                    <b style="color:#1e3a8a;">{ancho} x {alto}</b>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-else:
-    st.header("📋 Historial de Presupuestos")
-    # Simulación de tabla de base de datos
-    df_fake = pd.DataFrame({
-        "Folio": ["VAZ-001", "VAZ-002"],
-        "Cliente": ["Juan Pérez", "María García"],
-        "Total": ["$2,450.00", "$5,120.00"],
-        "Fecha": ["2026-05-09", "2026-05-10"]
-    })
-    st.table(df_fake)
+            if st.button("💾 Guardar y Generar Folio"):
+                if cliente:
+                    folio = f"VAZ-{random.randint(1000, 9999)}"
+                    # Aquí llamarías a la función para insertar en 'clientes' y 'presupuestos'
+                    st.success(f"Presupuesto guardado con éxito. Folio: {folio}")
+                    st.balloons()
+                else:
+                    st.warning("Por favor ingresa el nombre del cliente.")
