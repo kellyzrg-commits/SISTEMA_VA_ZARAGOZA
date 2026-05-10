@@ -4,115 +4,160 @@ import pandas as pd
 from datetime import datetime
 import random
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="VAZ-Control V3.2 - Cotizador Visual", layout="wide")
+# --- CONFIGURACIÓN DE IDENTIDAD ---
+st.set_page_config(page_title="Sistemas VAZ Zaragoza", layout="wide", page_icon="🏢")
 
-# --- FUNCIONES DE BASE DE DATOS ---
-def conectar_db():
-    try:
-        return mysql.connector.connect(
-            host=st.secrets["mysql"]["host"],
-            user=st.secrets["mysql"]["user"],
-            password=st.secrets["mysql"]["password"],
-            database=st.secrets["mysql"]["database"],
-            port=st.secrets["mysql"]["port"]
-        )
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-        return None
+# --- 1. CAPA DE DATOS (CONEXIÓN Y PERSISTENCIA) ---
+class DatabaseManager:
+    @staticmethod
+    def conectar():
+        try:
+            return mysql.connector.connect(
+                host=st.secrets["mysql"]["host"],
+                user=st.secrets["mysql"]["user"],
+                password=st.secrets["mysql"]["password"],
+                database=st.secrets["mysql"]["database"],
+                port=st.secrets["mysql"]["port"]
+            )
+        except Exception as e:
+            st.error(f"Error de conexión: {e}")
+            return None
 
-def obtener_precios_db():
-    conn = conectar_db()
-    if conn:
-        df = pd.read_sql("SELECT id_config, concepto, costo_base_m2 FROM configuracion_precios", conn)
-        conn.close()
-        return df
-    return pd.DataFrame()
+    @classmethod
+    def ejecutar_query(cls, query, valores=None, fetch=False):
+        conn = cls.conectar()
+        if not conn: return None
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(query, valores or ())
+            resultado = cursor.fetchall() if fetch else None
+            conn.commit()
+            return resultado
+        finally:
+            conn.close()
 
-# --- INTERFAZ DEL ASESOR ---
-if 'rol' not in st.session_state or st.session_state.rol != 'asesor':
-    st.warning("Acceso restringido. Por favor, inicia sesión como Asesor.")
-else:
-    st.header(f"📋 Nuevo Presupuesto Visual | Asesor: {st.session_state.nombre}")
+# --- 2. LÓGICA DE NEGOCIO ---
+def calcular_presupuesto(ancho, alto, costo_base, margen_color):
+    area_m2 = (ancho * alto) / 1000000
+    subtotal = area_m2 * float(costo_base)
+    # Aplicar 50% mano de obra y margen de color
+    total = (subtotal * 1.50) * margen_color
+    return total
 
-    # Estructura de dos columnas (Formulario y Gráfico)
-    col_form, col_visual = st.columns([1, 1.2])
+# --- 3. COMPONENTES VISUALES ---
+def render_grafico_tecnico(ancho, alto, color_name, modelo):
+    # Colores CSS para el dibujo
+    colores_map = {
+        "Blanco": "#FFFFFF", "Negro": "#1a1a1a", 
+        "Natural": "#94a3b8", "Bronce": "#451a03", "Madera": "#78350f"
+    }
+    color_hex = colores_map.get(color_name, "#000000")
+    
+    # Escalado proporcional para el canvas
+    max_dim = max(ancho, alto)
+    scale = 300 / max_dim if max_dim > 0 else 1
+    w_px, h_px = ancho * scale, alto * scale
 
-    with col_form:
-        with st.form("form_visual"):
-            st.subheader("1. Datos y Materiales")
-            cliente = st.text_input("Nombre del Cliente")
-            
-            df_precios = obtener_precios_db()
-            opciones_serie = df_precios['concepto'].tolist() if not df_precios.empty else ["Serie 20"]
-            serie = st.selectbox("Serie", opciones_serie)
-            
-            modelo = st.selectbox("Modelo", ["Fijo", "Corrediza", "Batiente", "Mosquitero Fijo"])
-            
-            # --- NUEVO: Margen por color ---
-            margen_colores = {"Blanco": 1.0, "Negro": 1.05, "Natural": 1.0, "Bronce": 1.08, "Madera": 1.15}
-            color = st.selectbox("Color del Aluminio", list(margen_colores.keys()))
-            
-            st.divider()
-            st.subheader("2. Medidas y Cristal")
-            c1, c2 = st.columns(2)
-            # Medidas que disparan el cambio en el gráfico
-            ancho = c1.number_input("Ancho (mm)", min_value=1, value=1200, step=1)
-            alto = c2.number_input("Alto (mm)", min_value=1, value=1500, step=1)
-            
-            espesor = st.selectbox("Cristal", ["6mm", "9mm", "10mm Templado", "DuoVent"])
-
-            st.divider()
-            
-            # --- CÁLCULO DE INGENIERÍA CON MÁRGENES ---
-            costo_base = float(df_precios[df_precios['concepto'] == serie]['costo_base_m2'].values[0])
-            area_m2 = (ancho * alto) / 1000000
-            
-            total_calc = (area_m2 * costo_base) # Costo Material Base
-            total_calc = total_calc * 1.50      # +50% Mano de obra
-            total_calc = total_calc * margen_colores[color] # +Margen por color especializado
-            
-            st.write(f"## Total: ${total_calc:,.2f} MXN")
-            st.caption(f"Incluye mano de obra y margen por color {color} (+{int((margen_colores[color]-1)*100)}%).")
-
-            guardar = st.form_submit_button("🚀 Guardar Presupuesto")
-
-    # --- NUEVO: COLUMNA VISUAL (CANVAS TÉCNICO) ---
-    with col_visual:
-        st.subheader("📐 Validación Técnica (Vista Previa)")
-        
-        # Mapeo de colores de aluminio a códigos hexadecimales para el borde
-        css_colores = {"Blanco": "#e2e8f0", "Negro": "#000000", "Natural": "#94a3b8", "Bronce": "#854d0e", "Madera": "#a16207"}
-        color_borde = css_colores.get(color, "#000000")
-        
-        # Lógica de escalado para que el dibujo no se salga de la pantalla
-        max_dim_mm = max(ancho, alto)
-        canvas_height_px = 400
-        # Escalamos proporcionalmente las medidas de mm a px
-        scale_factor = (canvas_height_px - 40) / max_dim_mm if max_dim_mm > 0 else 1
-        
-        w_px = ancho * scale_factor
-        h_px = alto * scale_factor
-
-        # Dibujo Técnico usando HTML/CSS dentro de Streamlit
-        st.markdown(f"""
-            <div style="background-color:white; border:2px solid #cbd5e1; border-radius:15px; padding:20px; height:{canvas_height_px}px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                <div style="width:{w_px}px; text-align:center; border-bottom:1px solid #94a3b8; color:#64748b; font-size:12px; margin-bottom:5px;">
-                    {ancho} mm
+    st.markdown(f"""
+        <div style="background:#f1f5f9; border-radius:10px; padding:30px; display:flex; flex-direction:column; align-items:center; border:1px solid #cbd5e1;">
+            <div style="width:{w_px}px; text-align:center; border-bottom:2px solid #64748b; margin-bottom:10px; color:#1e293b; font-weight:bold;">{ancho} mm</div>
+            <div style="display:flex; align-items:center;">
+                <div style="width:{w_px}px; height:{h_px}px; border:10px solid {color_hex}; background:rgba(14, 165, 233, 0.2); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center;">
+                    <span style="background:white; padding:5px; border-radius:5px; font-size:12px; color:black; font-weight:bold; border:1px solid {color_hex}">{modelo}</span>
                 </div>
-                <div style="display:flex; align-items:center;">
-                    <div style="width:{w_px}px; height:{h_px}px; border:8px solid {color_borde}; background-color:rgba(186,230,253,0.3); display:flex; align-items:center; justify-content:center; box-shadow: inset 0 0 10px rgba(0,0,0,0.1);">
-                        <span style="color:{color_borde}; font-weight:bold; font-size:14px; background:white; padding:2px 5px; border-radius:3px;">
-                            {modelo.upper()}
-                        </span>
-                    </div>
-                    <div style="height:{h_px}px; display:flex; align-items:center; color:#64748b; font-size:12px; margin-left:10px; padding-left:5px; border-left:1px solid #94a3b8;">
-                        {alto} mm
-                    </div>
-                </div>
+                <div style="height:{h_px}px; margin-left:15px; border-left:2px solid #64748b; display:flex; align-items:center; padding-left:10px; color:#1e293b; font-weight:bold;">{alto} mm</div>
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
 
-        if guardar and cliente:
-            st.success(f"Presupuesto para {cliente} guardado (Simulación).")
-            st.balloons()
+# --- 4. APLICACIÓN PRINCIPAL ---
+def main():
+    if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+
+    # --- LOGIN ---
+    if not st.session_state.logged_in:
+        st.title("🔐 Acceso VAZ Zaragoza")
+        with st.form("login"):
+            u = st.text_input("Usuario")
+            p = st.text_input("Contraseña", type="password")
+            if st.form_submit_button("Entrar"):
+                res = DatabaseManager.ejecutar_query("SELECT * FROM usuarios WHERE nombre_usuario=%s AND password_hash=%s", (u, p), fetch=True)
+                if res:
+                    st.session_state.logged_in = True
+                    st.session_state.update({"rol": res[0]['rol'], "nombre": res[0]['nombre_real'], "uid": res[0]['id_usuario']})
+                    st.rerun()
+                else: st.error("Credenciales incorrectas")
+        return
+
+    # --- PANEL DE CONTROL ---
+    st.sidebar.title("VAZ Zaragoza")
+    st.sidebar.write(f"Usuario: {st.session_state.nombre}")
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    # --- MODO ADMIN: GESTIÓN DE PRECIOS ---
+    if st.session_state.rol == 'administrador':
+        st.header("⚙️ Configuración Global de Precios")
+        precios = pd.DataFrame(DatabaseManager.ejecutar_query("SELECT * FROM configuracion_precios", fetch=True))
+        if not precios.empty:
+            editado = st.data_editor(precios, hide_index=True, disabled=["id_config", "concepto"])
+            if st.button("Actualizar Base de Datos"):
+                for _, r in editado.iterrows():
+                    DatabaseManager.ejecutar_query("UPDATE configuracion_precios SET costo_base_m2=%s WHERE id_config=%s", (r['costo_base_m2'], r['id_config']))
+                st.success("Lista de precios actualizada.")
+
+    # --- MODO ASESOR: COTIZADOR TÉCNICO ---
+    else:
+        st.header("📝 Nueva Cotización Profesional")
+        
+        with st.form("cotizador"):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("👤 Cliente")
+                nombre = st.text_input("Nombre Completo")
+                tel = st.text_input("Teléfono")
+                dir_obra = st.text_area("Dirección de la Obra")
+            
+            with c2:
+                st.subheader("📐 Especificaciones")
+                precios_db = pd.DataFrame(DatabaseManager.ejecutar_query("SELECT * FROM configuracion_precios", fetch=True))
+                serie = st.selectbox("Serie de Aluminio", precios_db['concepto'].tolist())
+                modelo = st.selectbox("Tipo de Producto", ["Ventana Corrediza", "Puerta Batiente", "Fijo", "Mosquitero"])
+                
+                m_colores = {"Blanco": 1.0, "Negro": 1.05, "Natural": 1.0, "Bronce": 1.10, "Madera": 1.20}
+                color = st.selectbox("Acabado/Color", list(m_colores.keys()))
+                
+                f1, f2, f3 = st.columns(3)
+                ancho = f1.number_input("Ancho (mm)", min_value=100, value=1000)
+                alto = f2.number_input("Alto (mm)", min_value=100, value=1000)
+                espesor = f3.selectbox("Cristal", ["6mm", "10mm Templado", "DuoVent"])
+
+            st.divider()
+            
+            # Cálculos en tiempo real
+            c_base = precios_db[precios_db['concepto'] == serie]['costo_base_m2'].values[0]
+            total = calcular_presupuesto(ancho, alto, c_base, m_colores[color])
+            
+            # Renderizado del Gráfico
+            render_grafico_tecnico(ancho, alto, color, modelo)
+            
+            st.write(f"## Presupuesto Estimado: ${total:,.2f} MXN")
+            
+            if st.form_submit_button("💾 Guardar y Finalizar"):
+                if nombre and ancho > 100:
+                    folio = f"VAZ-{random.randint(1000, 9999)}"
+                    # Insertar Cliente
+                    DatabaseManager.ejecutar_query("INSERT INTO clientes (folio_vaz, nombre_completo, telefono, direccion) VALUES (%s, %s, %s, %s)", (folio, nombre, tel, dir_obra))
+                    # Obtener ID Cliente (Simplicidad para este ejemplo)
+                    last_c = DatabaseManager.ejecutar_query("SELECT id_cliente FROM clientes ORDER BY id_cliente DESC LIMIT 1", fetch=True)[0]['id_cliente']
+                    # Insertar Presupuesto
+                    q_pre = "INSERT INTO presupuestos (id_cliente, id_usuario, serie, modelo, color, espesor, ancho_mm, alto_mm, monto_total) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    DatabaseManager.ejecutar_query(q_pre, (last_c, st.session_state.uid, serie, modelo, color, espesor, ancho, alto, total))
+                    
+                    st.success(f"¡Guardado! Folio: {folio}")
+                    st.balloons()
+                else: st.warning("Completa los campos obligatorios.")
+
+if __name__ == "__main__":
+    main()
