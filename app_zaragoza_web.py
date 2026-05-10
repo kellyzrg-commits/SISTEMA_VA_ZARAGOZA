@@ -6,7 +6,7 @@ from datetime import datetime
 import random
 import base64
 
-# --- 1. SISTEMA DE SEGURIDAD (PUNTO 4: LOGIN) ---
+# --- 1. SEGURIDAD (Login con Secrets) ---
 def check_password():
     def password_guessed():
         if st.session_state["password"] == st.secrets["admin_password"]:
@@ -29,7 +29,7 @@ def check_password():
 st.set_page_config(page_title="VA Zaragoza Enterprise", page_icon="🏢", layout="wide")
 
 if check_password():
-    # --- ESTILOS DE INTERFAZ ---
+    # --- ESTILOS ---
     st.markdown("""
         <style>
         .main { background-color: #f8f9fa; }
@@ -38,33 +38,24 @@ if check_password():
         </style>
         """, unsafe_allow_html=True)
 
-    # --- CONEXIÓN DB (SIN ALTERAR) ---
+    # --- CONEXIÓN DB (AIVEN) ---
     def conectar_db():
         try:
             return mysql.connector.connect(
-                user=st.secrets.mysql.user, password=st.secrets.mysql.password,
-                host=st.secrets.mysql.host, port=st.secrets.mysql.port,
-                database=st.secrets.mysql.database, ssl_ca='ca.pem'
+                user=st.secrets.mysql.user, 
+                password=st.secrets.mysql.password,
+                host=st.secrets.mysql.host, 
+                port=st.secrets.mysql.port,
+                database=st.secrets.mysql.database, 
+                ssl_ca='ca.pem'
             )
         except: return None
 
-    # --- PUNTO 1: GESTIÓN DE PRECIOS DINÁMICA ---
-    # Inicializamos precios en la sesión si no existen
+    # Inicialización de precios en sesión
     if 'precios_m2' not in st.session_state:
         st.session_state.precios_m2 = {"Serie 20": 1250, "Serie 35": 1550, "Eurovent": 2950, "Templado": 3600}
 
-    # --- LÓGICA DE ACTUALIZACIÓN DE ESTADO (PUNTO 3) ---
-    def actualizar_estado(id_pre, nuevo_estado):
-        conn = conectar_db()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE presupuestos SET estado = %s WHERE id_presupuesto = %s", (nuevo_estado, id_pre))
-                conn.commit()
-                return True
-            finally: conn.close()
-        return False
-
+    # Lógica de base de datos
     def guardar_registro(datos):
         conn = conectar_db()
         if not conn: return False
@@ -79,7 +70,18 @@ if check_password():
         except: return False
         finally: conn.close()
 
-    # --- GENERADOR DE PDF (SIN IVA) ---
+    def actualizar_estado(id_pre, nuevo_estado):
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE presupuestos SET estado = %s WHERE id_presupuesto = %s", (nuevo_estado, id_pre))
+                conn.commit()
+                return True
+            finally: conn.close()
+        return False
+
+    # --- GENERADOR DE PDF ---
     class PDF(FPDF):
         def header(self):
             self.set_font('Arial', 'B', 16)
@@ -100,22 +102,22 @@ if check_password():
         pdf.cell(60, 8, f" Acabado: {datos['color']}", 1, 1, 'C')
         pdf.ln(10)
         pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(240, 240, 240)
-        pdf.cell(90, 8, "SISTEMA", 1, 0, 'C', fill=True)
-        pdf.cell(30, 8, "MEDIDAS", 1, 0, 'C', fill=True)
-        pdf.cell(30, 8, "ÁREA", 1, 0, 'C', fill=True)
-        pdf.cell(40, 8, "PRECIO NETO", 1, 1, 'C', fill=True)
+        pdf.cell(80, 8, "SISTEMA", 1, 0, 'C', fill=True)
+        pdf.cell(35, 8, "MEDIDAS", 1, 0, 'C', fill=True)
+        pdf.cell(35, 8, "ÁREA", 1, 0, 'C', fill=True)
+        pdf.cell(40, 8, "TOTAL NETO", 1, 1, 'C', fill=True)
         pdf.set_font('Arial', '', 10)
-        pdf.cell(90, 12, f" {datos['sistema']}", 1, 0, 'L')
-        pdf.cell(30, 12, f" {datos['ancho']}x{datos['alto']}", 1, 0, 'C')
-        pdf.cell(30, 12, f" {((datos['ancho']*datos['alto'])/1000000):.2f}m2", 1, 0, 'C')
+        pdf.cell(80, 12, f" {datos['sistema']}", 1, 0, 'L')
+        pdf.cell(35, 12, f" {datos['ancho']}x{datos['alto']}", 1, 0, 'C')
+        pdf.cell(35, 12, f" {((datos['ancho']*datos['alto'])/1000000):.2f}m2", 1, 0, 'C')
         pdf.cell(40, 12, f" $ {datos['monto']:,.2f}", 1, 1, 'R')
         return pdf.output(dest='S').encode('latin-1')
 
-    # --- DIBUJO TÉCNICO (SVG) ---
+    # --- DIBUJO TÉCNICO ---
     def dibujar_svg(ancho, alto, acabado):
         colores = {"Blanco": "#FFFFFF", "Negro": "#262626", "Natural": "#A6A6A6", "Madera": "#734A29"}
         hex_c = colores.get(acabado, "#A6A6A6")
-        base = 350
+        base = 300
         w = base if ancho >= alto else (ancho / alto) * base
         h = base if alto > ancho else (alto / ancho) * base
         return f"""
@@ -127,67 +129,55 @@ if check_password():
         </svg>
         """
 
-    # --- INTERFAZ DE USUARIO ---
+    # --- INTERFAZ ---
     st.title("🏢 VA Zaragoza Enterprise")
-    
-    tabs = st.tabs(["📝 Cotizador Pro", "📋 Seguimiento", "📊 Dashboard", "⚙️ Admin Precios"])
+    tabs = st.tabs(["📝 Cotizador", "📋 Seguimiento", "📊 Dashboard", "⚙️ Precios"])
 
-    # --- TAB 1: COTIZADOR ---
     with tabs[0]:
         c1, c2 = st.columns([1, 1.2])
         with c1:
-            nombre = st.text_input("Nombre del Cliente")
+            nombre = st.text_input("Cliente")
             f1, f2 = st.columns(2)
             sis = f1.selectbox("Línea", list(st.session_state.precios_m2.keys()))
             col_alum = f2.selectbox("Acabado", ["Blanco", "Negro", "Natural", "Madera"])
+            anc = st.number_input("Ancho (mm)", min_value=100, value=1000)
+            alt = st.number_input("Alto (mm)", min_value=100, value=1000)
             
-            f3, f4 = st.columns(2)
-            anc = f3.number_input("Ancho (mm)", min_value=100, value=1200)
-            alt = f4.number_input("Alto (mm)", min_value=100, value=1500)
-            
-            # Punto 2: Validación de Ingeniería
-            if anc > 2500 or alt > 2500:
-                st.warning("⚠️ Medida crítica detectada. Consultar espesor de vidrio recomendado.")
+            if anc > 2800 or alt > 2800:
+                st.warning("⚠️ Medida crítica: Requiere refuerzo estructural.")
 
             total = ((anc * alt) / 1000000) * st.session_state.precios_m2[sis]
             st.metric("Total Neto", f"${total:,.2f}")
 
-            if st.button("💾 Guardar y Generar PDF"):
+            if st.button("Guardar y PDF"):
                 if nombre:
                     fol = f"VAZ-{random.randint(1000, 9999)}"
                     d = {'nombre': nombre, 'ancho': anc, 'alto': alt, 'monto': total, 'folio': fol, 'sistema': sis, 'color': col_alum}
                     if guardar_registro(d):
-                        st.success(f"Registrado con éxito. Folio: {fol}")
-                        st.download_button("📥 Descargar PDF", generar_pdf(d), f"{fol}.pdf")
-                else: st.error("Ingresa el nombre del cliente.")
-
+                        st.success(f"Guardado: {fol}")
+                        st.download_button("Descargar PDF", generar_pdf(d), f"{fol}.pdf")
+                else: st.error("Falta nombre del cliente.")
         with c2:
-            st.subheader("Vista Previa")
-            st.markdown(f'<div style="display:flex; justify-content:center; background:white; padding:25px; border-radius:15px; border:1px solid #ddd;">{dibujar_svg(anc, alt, col_alum)}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex; justify-content:center; background:white; padding:20px; border-radius:15px; border:1px solid #ddd;">{dibujar_svg(anc, alt, col_alum)}</div>', unsafe_allow_html=True)
 
-    # --- TAB 2: SEGUIMIENTO (PUNTO 3) ---
     with tabs[1]:
-        st.subheader("Control de Producción")
+        st.subheader("Estatus de Pedidos")
         conn = conectar_db()
         if conn:
             df = pd.read_sql("SELECT p.id_presupuesto, c.nombre_completo, p.importe_neto, p.estado FROM presupuestos p JOIN clientes c ON p.id_cliente = c.id_cliente ORDER BY p.id_presupuesto DESC", conn)
-            for index, row in df.iterrows():
-                col_a, col_b, col_c = st.columns([2, 1, 1])
-                col_a.write(f"**{row['nombre_completo']}** - ${row['importe_neto']:,.2f}")
-                nuevo_st = col_b.selectbox("Estado", ["Cotizado", "En Proceso", "Terminado", "Entregado"], key=f"sel_{row['id_presupuesto']}", index=["Cotizado", "En Proceso", "Terminado", "Entregado"].index(row['estado']))
-                if col_c.button("Actualizar", key=f"btn_{row['id_presupuesto']}"):
-                    if actualizar_estado(row['id_presupuesto'], nuevo_st):
-                        st.rerun()
+            for _, row in df.iterrows():
+                ca, cb, cc = st.columns([2, 1, 1])
+                ca.write(f"**{row['nombre_completo']}** - ${row['importe_neto']:,.2f}")
+                nuevo = cb.selectbox("Estatus", ["Cotizado", "En Proceso", "Terminado"], key=f"s_{row['id_presupuesto']}", index=["Cotizado", "En Proceso", "Terminado"].index(row['estado']))
+                if cc.button("Actualizar", key=f"b_{row['id_presupuesto']}"):
+                    if actualizar_estado(row['id_presupuesto'], nuevo): st.rerun()
             conn.close()
 
-    # --- TAB 3: DASHBOARD (PUNTO 6) ---
     with tabs[2]:
-        st.subheader("Analítica de Negocio")
-        m1, m2 = st.columns(2)
-        m1.metric("Proyección de Ingresos", "$94,200", "+8%")
-        m2.metric("Sistema más Vendido", "Eurovent")
-        st.bar_chart(pd.DataFrame({'Ventas': [15, 25, 40, 10]}, index=list(st.session_state.precios_m2.keys())))
+        st.subheader("Métricas de Venta")
+        st.bar_chart(pd.DataFrame({'Ventas': [10, 20, 30, 5]}, index=list(st.session_state.precios_m2.keys())))
 
-    # --- TAB 4: ADMIN PRECIOS (PUNTO 1) ---
     with tabs[3]:
-        st
+        st.subheader("Admin de Precios")
+        for s, p in st.session_state.precios_m2.items():
+            st.session_state.precios_m2[s] = st.number_input(f"Precio {s}", value=float(p), step=50.0)
