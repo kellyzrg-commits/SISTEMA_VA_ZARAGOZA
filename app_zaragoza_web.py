@@ -6,145 +6,139 @@ from datetime import datetime
 import random
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="VA Zaragoza - Cotizador", layout="wide")
+st.set_page_config(page_title="VA Zaragoza - Catálogo Pro", layout="wide")
 
-# --- CSS PARA EL CATÁLOGO Y LA ILUSTRACIÓN ---
+# CSS para el diseño de tarjetas y submenús
 st.markdown("""
     <style>
-    .product-card {
-        background-color: white;
+    .main-card {
+        background-color: #1e3a8a;
+        color: white;
         padding: 20px;
-        border-radius: 15px;
-        border: 2px solid #e2e8f0;
+        border-radius: 12px;
         text-align: center;
-        cursor: pointer;
-        transition: 0.3s;
+        font-weight: bold;
+        margin-bottom: 10px;
     }
-    .product-card:hover { border-color: #1e3a8a; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    
-    /* Contenedor de la ilustración ajustable */
-    .canvas-container {
+    .sub-button-container {
         background-color: #f1f5f9;
-        border-radius: 10px;
+        padding: 10px;
+        border-radius: 0 0 12px 12px;
+        border: 1px solid #e2e8f0;
+        margin-top: -10px;
+        margin-bottom: 20px;
+    }
+    .canvas-container {
+        background-color: #ffffff;
+        border: 2px dashed #cbd5e1;
+        border-radius: 15px;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 20px;
-        height: 300px;
+        height: 350px;
         position: relative;
     }
-    .rect-ajustable {
-        border: 4px solid #1e3a8a;
-        background-color: rgba(30, 58, 138, 0.1);
+    .rect-vaz {
+        border: 5px solid #1e3a8a;
+        background-color: rgba(30, 58, 138, 0.05);
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.5s ease;
-    }
-    .medida-texto {
-        font-weight: bold;
-        color: #1e3a8a;
-        font-size: 14px;
+        transition: all 0.4s ease;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # --- MOTOR DE CÁLCULO ---
-def calcular_costo(producto, linea, ancho, alto):
+def calcular_total(prod, sub, anc, alt):
     precios = {
-        "Ventana": {"2 Pulgadas": 1150, "3 Pulgadas": 1450},
-        "Puerta": {"2 Pulgadas": 1600, "3 Pulgadas": 1950},
-        "Mosquitero": {"Fijo": 450, "Corredizo": 750}
+        "Ventana": {"2 Pulgadas": 1100, "3 Pulgadas": 1400},
+        "Puerta": {"2 Pulgadas": 1550, "3 Pulgadas": 1850},
+        "Mosquitero": {"Fijo": 400, "Corredizo": 700}
     }
-    m2 = (ancho * alto) / 1000000
-    costo_base = m2 * precios[producto].get(linea, 1000)
-    # +50% Mano de obra y redondeo
-    return round(costo_base * 1.50, 2)
+    m2 = (anc * alt) / 1000000
+    base = precios[prod].get(sub, 1000)
+    return round((m2 * base) * 1.50, 2)
 
-# --- INTERFAZ PRINCIPAL ---
-st.title("🏢 VA Zaragoza: Catálogo y Cotizador")
+# --- VARIABLES DE ESTADO ---
+if 'menu_abierto' not in st.session_state: st.session_state.menu_abierto = None
+if 'sub_elegido' not in st.session_state: st.session_state.sub_elegido = None
 
-if 'view' not in st.session_state:
-    st.session_state.view = 'catalogo'
-if 'prod_name' not in st.session_state:
-    st.session_state.prod_name = ""
+st.title("🏢 Catálogo Interactivo VA Zaragoza")
 
-# --- VISTA 1: CATÁLOGO ---
-if st.session_state.view == 'catalogo':
-    st.subheader("Selecciona un producto para cotizar:")
-    col1, col2, col3 = st.columns(3)
+# --- SECCIÓN 1: MENÚ CON SUB-CATEGORÍAS ---
+col1, col2, col3 = st.columns(3)
+
+# VENTANAS
+with col1:
+    st.markdown('<div class="main-card">🪟 VENTANAS</div>', unsafe_allow_html=True)
+    if st.button("Ver opciones de Ventana", use_container_width=True):
+        st.session_state.menu_abierto = "Ventana"
     
-    with col1:
-        st.markdown('<div class="product-card"><h3>🪟 Ventanas</h3><p>2" y 3" Corredizas</p></div>', unsafe_allow_html=True)
-        if st.button("Cotizar Ventana", use_container_width=True):
-            st.session_state.prod_name = "Ventana"
-            st.session_state.view = 'calculadora'
-            st.rerun()
+    if st.session_state.menu_abierto == "Ventana":
+        with st.container():
+            st.markdown('<div class="sub-button-container">', unsafe_allow_html=True)
+            if st.button("Línea 2\"", key="v2"): st.session_state.sub_elegido = ("Ventana", "2 Pulgadas")
+            if st.button("Línea 3\"", key="v3"): st.session_state.sub_elegido = ("Ventana", "3 Pulgadas")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with col2:
-        st.markdown('<div class="product-card"><h3>🚪 Puertas</h3><p>Batientes y Corredizas</p></div>', unsafe_allow_html=True)
-        if st.button("Cotizar Puerta", use_container_width=True):
-            st.session_state.prod_name = "Puerta"
-            st.session_state.view = 'calculadora'
-            st.rerun()
+# PUERTAS
+with col2:
+    st.markdown('<div class="main-card">🚪 PUERTAS</div>', unsafe_allow_html=True)
+    if st.button("Ver opciones de Puerta", use_container_width=True):
+        st.session_state.menu_abierto = "Puerta"
+    
+    if st.session_state.menu_abierto == "Puerta":
+        with st.container():
+            st.markdown('<div class="sub-button-container">', unsafe_allow_html=True)
+            if st.button("Línea 2\"", key="p2"): st.session_state.sub_elegido = ("Puerta", "2 Pulgadas")
+            if st.button("Línea 3\"", key="p3"): st.session_state.sub_elegido = ("Puerta", "3 Pulgadas")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with col3:
-        st.markdown('<div class="product-card"><h3>🦟 Mosquiteros</h3><p>Fijo y Corredizo</p></div>', unsafe_allow_html=True)
-        if st.button("Cotizar Mosquitero", use_container_width=True):
-            st.session_state.prod_name = "Mosquitero"
-            st.session_state.view = 'calculadora'
-            st.rerun()
+# MOSQUITEROS
+with col3:
+    st.markdown('<div class="main-card">🦟 MOSQUITEROS</div>', unsafe_allow_html=True)
+    if st.button("Ver opciones de Mosquitero", use_container_width=True):
+        st.session_state.menu_abierto = "Mosquitero"
+    
+    if st.session_state.menu_abierto == "Mosquitero":
+        with st.container():
+            st.markdown('<div class="sub-button-container">', unsafe_allow_html=True)
+            if st.button("Tipo Fijo", key="mf"): st.session_state.sub_elegido = ("Mosquitero", "Fijo")
+            if st.button("Tipo Corredizo", key="mc"): st.session_state.sub_elegido = ("Mosquitero", "Corredizo")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-# --- VISTA 2: CALCULADORA CON ILUSTRACIÓN ---
-elif st.session_state.view == 'calculadora':
-    st.button("⬅️ Volver al Catálogo", on_click=lambda: st.session_state.update({"view": "catalogo"}))
-    st.header(f"Cotizando: {st.session_state.prod_name}")
+st.divider()
 
-    c1, c2 = st.columns([1, 1.2])
-
-    with c1:
-        with st.container(border=True):
+# --- SECCIÓN 2: CALCULADORA E ILUSTRACIÓN ---
+if st.session_state.sub_elegido:
+    prod, sub = st.session_state.sub_elegido
+    st.subheader(f"Cotizando: {prod} - {sub}")
+    
+    c_izq, c_der = st.columns([1, 1.2])
+    
+    with c_izq:
+        with st.form("calc_vaz"):
             cliente = st.text_input("Nombre del Cliente")
-            if st.session_state.prod_name == "Mosquitero":
-                variante = st.selectbox("Tipo", ["Fijo", "Corredizo"])
-            else:
-                variante = st.selectbox("Línea de Aluminio", ["2 Pulgadas", "3 Pulgadas"])
+            ancho = st.number_input("Ancho (mm)", value=1000, step=50)
+            alto = st.number_input("Alto (mm)", value=1200, step=50)
             
-            ancho = st.number_input("Ancho (mm)", min_value=100, max_value=5000, value=1000, step=10)
-            alto = st.number_input("Alto (mm)", min_value=100, max_value=5000, value=1200, step=10)
+            res = calcular_total(prod, sub, ancho, alto)
+            st.markdown(f"<h2 style='color:#1e3a8a;'>Total: ${res:,.2f}</h2>", unsafe_allow_html=True)
             
-            total = calcular_costo(st.session_state.prod_name, variante, ancho, alto)
-            
-            st.markdown(f"""
-                <div style="background:#f0fdf4; padding:20px; border-radius:10px; text-align:center; border:1px solid #bbf7d0;">
-                    <h2 style="color:#166534; margin:0;">Total: ${total:,.2f}</h2>
-                    <p style="color:#166534; margin:0;">MXN (Material + Mano de obra)</p>
-                </div>
-            """, unsafe_allow_html=True)
+            if st.form_submit_button("💾 Guardar Presupuesto"):
+                st.success(f"¡Listo! Folio VAZ-{random.randint(100,999)} creado.")
 
-    with c2:
-        st.subheader("Ilustración de Medidas")
-        # --- LÓGICA DE ESCALA PARA LA ILUSTRACIÓN ---
-        # Escalamos los mm a pixeles para que quepa en el contenedor de 300px
-        max_dim = max(ancho, alto)
-        escala = 250 / max_dim
-        w_px = ancho * escala
-        h_px = alto * escala
-
+    with c_der:
+        # Lógica de dibujo ajustable
+        max_d = max(ancho, alto)
+        scale = 280 / max_d
+        w_px, h_px = ancho * scale, alto * scale
+        
         st.markdown(f"""
             <div class="canvas-container">
-                <div class="rect-ajustable" style="width: {w_px}px; height: {h_px}px;">
-                    <span class="medida-texto">{ancho} x {alto}</span>
-                </div>
-                <div style="position:absolute; bottom:10px; width:100%; text-align:center; font-size:12px; color:#64748b;">
-                    Vista previa proporcional de la estructura
+                <div class="rect-vaz" style="width:{w_px}px; height:{h_px}px;">
+                    <b style="color:#1e3a8a;">{ancho}x{alto}</b>
                 </div>
             </div>
         """, unsafe_allow_html=True)
-
-    if st.button("✅ Confirmar y Generar Registro", use_container_width=True):
-        if cliente:
-            st.balloons()
-            st.success(f"Presupuesto para {cliente} guardado con éxito.")
-        else:
-            st.error("Ingresa el nombre del cliente.")
