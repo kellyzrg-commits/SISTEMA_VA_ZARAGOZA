@@ -250,7 +250,7 @@ def main():
             cortes_data = VAZ_Motor.generar_hoja_taller(ancho, alto, producto)
             st.table(pd.DataFrame(cortes_data))
             
-        st.ln(1)
+   st.write("")
         if st.button("📄 GENERAR DOCUMENTO DE COTIZACIÓN"):
             if cliente:
                 folio_vaz = f"VAZ-{random.randint(1000, 9999)}"
