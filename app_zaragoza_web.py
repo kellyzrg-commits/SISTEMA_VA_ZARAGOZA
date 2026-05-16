@@ -3,7 +3,6 @@ import pandas as pd
 from fpdf2 import FPDF
 from datetime import datetime
 import random
-import base64
 import matplotlib.pyplot as plt
 import io
 
@@ -122,15 +121,15 @@ def generar_dibujo_tecnico(ancho, alto, producto):
         mitad = ancho / 2
         # Separador de hojas (Fijo / Corredizo)
         ax.plot([mitad, mitad], [0, alto], color='#0f172a', linewidth=2)
-        # Indicador de paño fijo (X) y deslizamiento (Flecha técnica)
+        # Indicador de paño fijo (FIJO) y deslizamiento (Flecha técnica)
         ax.text(mitad/2, alto/2, "FIJO", ha='center', va='center', color='gray', fontsize=10, weight='bold')
-        ax.annotate('◄═══════', xy=(mitad + mitad/2, alto/2), ha='center', va='center', fontsize=12, color='#0f172a')
+        ax.annotate('<-', xy=(mitad + mitad/2, alto/2), ha='center', va='center', fontsize=12, color='#0f172a')
     elif "Puerta" in producto:
-        # Dibujar sentido de apertura abatible con líneas punteadas
+        # Sentido de apertura abatible
         ax.plot([0, ancho, ancho], [0, alto/2, alto], color='gray', linestyle='--')
-        ax.text(ancho/2, alto/2, "↻", ha='center', va='center', fontsize=24, color='#0f172a')
+        ax.text(ancho/2, alto/2, "O", ha='center', va='center', fontsize=24, color='#0f172a')
 
-    # Acotaciones Dinámicas Automatizadas en Milímetros (mm)
+    # Acotaciones Dinámicas
     ax.annotate(f'{ancho} mm', xy=(ancho/2, alto + (alto*0.04)), ha='center', fontsize=11, color='#0f172a', weight='bold')
     ax.annotate(f'{alto} mm', xy=(-(ancho*0.05), alto/2), va='center', rotation=90, fontsize=11, color='#0f172a', weight='bold')
 
@@ -145,16 +144,17 @@ def generar_dibujo_tecnico(ancho, alto, producto):
     return buf
 
 # ==========================================
-# MOTOR EXPORTADOR: PDF DOCUMENTAL
+# MOTOR EXPORTADOR: PDF DOCUMENTAL (FUENTES SEGURAS)
 # ==========================================
 class CotizacionPDF(FPDF):
     def header(self):
-        self.set_font('Arial', 'B', 16)
+        # Usamos 'helvetica' en lugar de 'Arial' para evitar problemas de compatibilidad core de fpdf2
+        self.set_font('helvetica', 'B', 16)
         self.set_text_color(15, 23, 42)
         self.cell(0, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'C')
-        self.set_font('Arial', '', 9)
+        self.set_font('helvetica', '', 9)
         self.set_text_color(120, 120, 120)
-        self.cell(0, 4, 'Presupuestos de Cancelería Residencial e Industrial', 0, 1, 'C')
+        self.cell(0, 4, 'Presupuestos de Canceleria Residencial e Industrial', 0, 1, 'C')
         self.ln(6)
         self.line(10, 28, 200, 28)
 
@@ -163,21 +163,21 @@ def exportar_pdf_oficial(datos, img_buf):
     pdf.add_page()
     
     # Bloque de cabecera comercial
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font('helvetica', 'B', 10)
     pdf.set_fill_color(240, 244, 248)
     pdf.cell(130, 8, f" CLIENTE: {datos['cliente'].upper()}", 1, 0, 'L', 1)
     pdf.cell(60, 8, f" FOLIO: {datos['folio']}", 1, 1, 'C', 1)
     
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(130, 8, f" Dirección: {datos['direccion'] if datos['direccion'] else 'Tehuacán, Puebla'}", 1, 0, 'L')
-    pdf.cell(60, 8, f" Emisión: {datetime.now().strftime('%d/%m/%Y')}", 1, 1, 'C')
+    pdf.set_font('helvetica', '', 9)
+    pdf.cell(130, 8, f" Direccion: {datos['direccion'] if datos['direccion'] else 'Tehuacan, Puebla'}", 1, 0, 'L')
+    pdf.cell(60, 8, f" Emision: {datetime.now().strftime('%d/%m/%Y')}", 1, 1, 'C')
     pdf.ln(6)
     
     # Contenedor de Especificaciones
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font('helvetica', 'B', 10)
     pdf.cell(0, 6, "DETALLE DE LOS PRODUCTOS COTIZADOS:", 0, 1)
-    pdf.set_font('Arial', '', 10)
-    info_estructura = f"Estructura: {datos['producto']}\nMedidas de Fabricación: {datos['ancho']} mm de Ancho x {datos['alto']} mm de Alto\nAcabado / Color: {datos['color']} | Cristal Configurado: {datos['cristal']}"
+    pdf.set_font('helvetica', '', 10)
+    info_estructura = f"Estructura: {datos['producto']}\nMedidas de Fabricacion: {datos['ancho']} mm de Ancho x {datos['alto']} mm de Alto\nAcabado / Color: {datos['color']} | Cristal Configurado: {datos['cristal']}"
     pdf.multi_cell(0, 6, info_estructura, border=1)
     
     # Incrustar renderizado gráfico de la pieza
@@ -188,7 +188,7 @@ def exportar_pdf_oficial(datos, img_buf):
     
     # Bloque Financiero Neto
     pdf.ln(6)
-    pdf.set_font('Arial', 'B', 14)
+    pdf.set_font('helvetica', 'B', 14)
     pdf.set_fill_color(15, 23, 42)
     pdf.set_text_color(255, 255, 255)
     pdf.cell(120, 12, " TOTAL NETO A PAGAR ", 1, 0, 'R', 1)
@@ -196,11 +196,11 @@ def exportar_pdf_oficial(datos, img_buf):
     
     # Términos legales de aceptación comercial
     pdf.ln(10)
-    pdf.set_font('Arial', 'I', 9)
+    pdf.set_font('helvetica', 'I', 9)
     pdf.set_text_color(80, 80, 80)
-    pdf.cell(0, 4, "Esta cotización tiene una vigencia de 15 días naturales a partir de su fecha de emisión.", 0, 1, 'C')
+    pdf.cell(0, 4, "Esta cotizacion tiene una vigencia de 15 dias naturales a partir de su fecha de emision.", 0, 1, 'C')
     
-    return pdf.output(dest='S').encode('latin-1')
+    return pdf.output()
 
 # ==========================================
 # INTERFAZ DE USUARIO (STREAMLIT APP)
@@ -217,7 +217,7 @@ def main():
         cliente = st.text_input("Nombre del Cliente", placeholder="Ej. Juan Pérez")
         direccion = st.text_input("Ubicación de la Obra", placeholder="Tehuacán, Pue.")
         
-        st.write("")  # Reemplazo seguro de st.ln()
+        st.write("")
         producto = st.selectbox("Seleccione el Producto", ["Ventana Fijo-Corrediza 3\"", "Puerta de Aluminio 3\""])
         color = st.selectbox("Color del Aluminio", ["Blanco", "Negro", "Natural", "Madera"])
         cristal = st.selectbox("Tipo de Cristal", ["Claro", "Filtrasol", "Esmerilado", "Templado"])
@@ -249,7 +249,7 @@ def main():
             cortes_data = VAZ_Motor.generar_hoja_taller(ancho, alto, producto)
             st.table(pd.DataFrame(cortes_data))
             
-        st.write("")  # Reemplazo seguro de st.ln()
+        st.write("")
         if st.button("📄 GENERAR DOCUMENTO DE COTIZACIÓN"):
             if cliente:
                 folio_vaz = f"VAZ-{random.randint(1000, 9999)}"
