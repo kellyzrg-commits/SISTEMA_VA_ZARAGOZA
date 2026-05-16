@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from fpdf import FPDF
+from fpdf import FPDF  # fpdf2 utiliza el mismo espacio de nombres, pero asegurémonos de que cargue bien
 from datetime import datetime
 import random
 import base64
