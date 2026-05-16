@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from fpdf2 import FPDF# fpdf2 utiliza el mismo espacio de nombres, pero asegurémonos de que cargue bien
+from fpdf2 import FPDF
 from datetime import datetime
 import random
 import base64
@@ -77,7 +77,6 @@ class VAZ_Motor:
         costo_base = area_m2 * VAZ_Motor.PRECIOS_BASE_M2.get(producto, 1200.0)
         
         # 3. APLICAR EL 50% DE GANANCIA SOLICITADO
-        # Multiplicar por 1.50 añade exactamente el 50% de margen de utilidad sobre el costo
         precio_final = costo_base * 1.50
         return area_m2, precio_final
 
@@ -127,7 +126,7 @@ def generar_dibujo_tecnico(ancho, alto, producto):
         ax.text(mitad/2, alto/2, "FIJO", ha='center', va='center', color='gray', fontsize=10, weight='bold')
         ax.annotate('◄═══════', xy=(mitad + mitad/2, alto/2), ha='center', va='center', fontsize=12, color='#0f172a')
     elif "Puerta" in producto:
-        # Dibujar sentido de apertura abatible con líneas punteadas industriales
+        # Dibujar sentido de apertura abatible con líneas punteadas
         ax.plot([0, ancho, ancho], [0, alto/2, alto], color='gray', linestyle='--')
         ax.text(ancho/2, alto/2, "↻", ha='center', va='center', fontsize=24, color='#0f172a')
 
@@ -187,7 +186,7 @@ def exportar_pdf_oficial(datos, img_buf):
         f.write(img_buf.getbuffer())
     pdf.image("temp_pdf_render.png", x=55, w=100)
     
-    # Bloque Financiero Neto (Cumple regla: NO IVA, NO COSTOS INTERNOS)
+    # Bloque Financiero Neto
     pdf.ln(6)
     pdf.set_font('Arial', 'B', 14)
     pdf.set_fill_color(15, 23, 42)
@@ -218,7 +217,7 @@ def main():
         cliente = st.text_input("Nombre del Cliente", placeholder="Ej. Juan Pérez")
         direccion = st.text_input("Ubicación de la Obra", placeholder="Tehuacán, Pue.")
         
-        st.markdown("---")
+        st.write("")  # Corregido: Reemplazo seguro de st.ln()
         producto = st.selectbox("Seleccione el Producto", ["Ventana Fijo-Corrediza 3\"", "Puerta de Aluminio 3\""])
         color = st.selectbox("Color del Aluminio", ["Blanco", "Negro", "Natural", "Madera"])
         cristal = st.selectbox("Tipo de Cristal", ["Claro", "Filtrasol", "Esmerilado", "Templado"])
@@ -245,12 +244,12 @@ def main():
             </div>
         """, unsafe_allow_html=True)
         
-        # Despliegue exclusivo de Taller (Protegido, no sale en el PDF del cliente)
+        # Despliegue de Taller (Uso Interno)
         with st.expander("🛠️ Ver Lista de Cortes para Taller (Uso Interno)"):
             cortes_data = VAZ_Motor.generar_hoja_taller(ancho, alto, producto)
             st.table(pd.DataFrame(cortes_data))
             
-   st.write("")
+        st.write("")  # Corregido: Reemplazo seguro de st.ln()
         if st.button("📄 GENERAR DOCUMENTO DE COTIZACIÓN"):
             if cliente:
                 folio_vaz = f"VAZ-{random.randint(1000, 9999)}"
