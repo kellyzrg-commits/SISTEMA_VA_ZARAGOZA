@@ -217,7 +217,7 @@ def main():
         cliente = st.text_input("Nombre del Cliente", placeholder="Ej. Juan Pérez")
         direccion = st.text_input("Ubicación de la Obra", placeholder="Tehuacán, Pue.")
         
-        st.write("")  # Corregido: Reemplazo seguro de st.ln()
+        st.write("")  # Reemplazo seguro de st.ln()
         producto = st.selectbox("Seleccione el Producto", ["Ventana Fijo-Corrediza 3\"", "Puerta de Aluminio 3\""])
         color = st.selectbox("Color del Aluminio", ["Blanco", "Negro", "Natural", "Madera"])
         cristal = st.selectbox("Tipo de Cristal", ["Claro", "Filtrasol", "Esmerilado", "Templado"])
@@ -249,7 +249,7 @@ def main():
             cortes_data = VAZ_Motor.generar_hoja_taller(ancho, alto, producto)
             st.table(pd.DataFrame(cortes_data))
             
-        st.write("")  # Corregido: Reemplazo seguro de st.ln()
+        st.write("")  # Reemplazo seguro de st.ln()
         if st.button("📄 GENERAR DOCUMENTO DE COTIZACIÓN"):
             if cliente:
                 folio_vaz = f"VAZ-{random.randint(1000, 9999)}"
