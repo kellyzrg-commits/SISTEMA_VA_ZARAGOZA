@@ -144,11 +144,10 @@ def generar_dibujo_tecnico(ancho, alto, producto):
     return buf
 
 # ==========================================
-# MOTOR EXPORTADOR: PDF DOCUMENTAL (FUENTES SEGURAS)
+# MOTOR EXPORTADOR: PDF DOCUMENTAL
 # ==========================================
 class CotizacionPDF(FPDF):
     def header(self):
-        # Usamos 'helvetica' en lugar de 'Arial' para evitar problemas de compatibilidad core de fpdf2
         self.set_font('helvetica', 'B', 16)
         self.set_text_color(15, 23, 42)
         self.cell(0, 10, 'VIDRIOS Y ALUMINIOS ZARAGOZA', 0, 1, 'C')
@@ -200,7 +199,8 @@ def exportar_pdf_oficial(datos, img_buf):
     pdf.set_text_color(80, 80, 80)
     pdf.cell(0, 4, "Esta cotizacion tiene una vigencia de 15 dias naturales a partir de su fecha de emision.", 0, 1, 'C')
     
-    return pdf.output()
+    # CORRECCIÓN DE LA LÍNEA 145: Retorna el contenido binario de manera correcta para fpdf2
+    return bytes(pdf.output())
 
 # ==========================================
 # INTERFAZ DE USUARIO (STREAMLIT APP)
