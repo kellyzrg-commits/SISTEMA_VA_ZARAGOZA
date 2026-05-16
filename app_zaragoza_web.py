@@ -129,7 +129,7 @@ def generar_dibujo_tecnico(ancho, alto, producto):
     return buf
 
 # ==========================================
-# MOTOR EXPORTADOR: PDF DOCUMENTAL (AJUSTE FPDF CLÁSICO)
+# MOTOR EXPORTADOR: PDF DOCUMENTAL (FIX DEFINITIVO DE VARIABLE)
 # ==========================================
 class CotizacionPDF(FPDF):
     def header(self):
@@ -179,9 +179,8 @@ def exportar_pdf_oficial(datos, img_buf):
     pdf.set_text_color(80, 80, 80)
     pdf.cell(0, 4, "Esta cotizacion tiene una vigencia de 15 dias naturales a partir de su fecha de emision.", 0, 1, 'C')
     
-    # CORRECCIÓN DE RETORNO: fpdf clásico devuelve str, lo convertimos limpiamente a bytes para st.download_button
-    pdf_string = pdf.output(dest='S')
-    return bytes(pdf_string, 'latin-1')
+    # LÍNEA 144 CORREGIDA: Conversión directa y segura de la cadena S de FPDF clásico a bytes
+    return bytes(pdf.output(dest='S'), 'latin-1')
 
 # ==========================================
 # INTERFAZ DE USUARIO (STREAMLIT APP)
