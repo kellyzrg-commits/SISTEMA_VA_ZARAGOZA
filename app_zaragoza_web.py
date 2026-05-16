@@ -18,7 +18,7 @@ st.set_page_config(
 # Estilos CSS - Minimalista Industrial Moderno (Azul Aluminio, Blanco y Negro)
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght=300;400;700&display=swap');
     html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
     .stApp { background-color: #ffffff; }
     h1, h2, h3 { color: #0f172a; font-weight: 700; }
@@ -129,7 +129,7 @@ def generar_dibujo_tecnico(ancho, alto, producto):
     return buf
 
 # ==========================================
-# MOTOR EXPORTADOR: PDF DOCUMENTAL (FUENTES ESTÁNDAR FPDF)
+# MOTOR EXPORTADOR: PDF DOCUMENTAL (AJUSTE FPDF CLÁSICO)
 # ==========================================
 class CotizacionPDF(FPDF):
     def header(self):
@@ -179,8 +179,9 @@ def exportar_pdf_oficial(datos, img_buf):
     pdf.set_text_color(80, 80, 80)
     pdf.cell(0, 4, "Esta cotizacion tiene una vigencia de 15 dias naturales a partir de su fecha de emision.", 0, 1, 'C')
     
-    # Retorno seguro usando el estándar clásico de FPDF
-    return pdf.output(dest='S').encode('latin-1')
+    # CORRECCIÓN DE RETORNO: fpdf clásico devuelve str, lo convertimos limpiamente a bytes para st.download_button
+    pdf_string = pdf.output(dest='S')
+    return bytes(pdf_string, 'latin-1')
 
 # ==========================================
 # INTERFAZ DE USUARIO (STREAMLIT APP)
